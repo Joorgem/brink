@@ -78,7 +78,7 @@ struct PopoverView: View {
     private var addMenu: some View {
         Menu {
             ForEach(ProviderKind.allCases) { kind in
-                Button("\(kind.displayName) (\(accounts.accounts(for: kind).count)/\(AccountStore.maxPerProvider))") {
+                Button(kind.displayName) {
                     adding = kind
                 }
                 .disabled(!accounts.canAdd(kind))
@@ -158,9 +158,6 @@ struct ProviderSection: View {
             HStack(spacing: 6) {
                 ProviderIcon(id: kind.rawValue, size: 13, color: palette.fg)
                 Text(kind.displayName).font(.system(size: 12, weight: .semibold))
-                Text("\(list.count)/\(AccountStore.maxPerProvider)")
-                    .font(.system(size: 10.5))
-                    .foregroundColor(palette.muted)
                 Spacer()
                 Button(action: onAdd) { Image(systemName: "plus") }
                     .buttonStyle(.plain)

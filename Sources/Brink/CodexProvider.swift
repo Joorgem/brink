@@ -83,11 +83,12 @@ struct CodexProvider: UsageProvider {
             ?? (root["rate_limits"] as? [String: Any])
             ?? root
         var windows: [UsageWindow] = []
+        // Same names Codex itself uses in `/status`.
         let ordered: [(String, String)] = [
-            ("primary_window", "Current session"),
-            ("primary", "Current session"),
-            ("secondary_window", "Weekly"),
-            ("secondary", "Weekly"),
+            ("primary_window", "5h limit"),
+            ("primary", "5h limit"),
+            ("secondary_window", "Weekly limit"),
+            ("secondary", "Weekly limit"),
         ]
         var seenLabels = Set<String>()
         for (key, label) in ordered {

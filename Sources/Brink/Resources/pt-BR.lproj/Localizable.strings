@@ -109,3 +109,5 @@
 "Updated %@" = "Atualizado %@";
 "Uses the account signed in to %@ on this Mac." = "Usa a conta logada no %@ neste Mac.";
 "Uses the account signed in to cursor-agent on this Mac." = "Usa a conta logada no cursor-agent neste Mac.";
+"5h limit" = "Limite de 5 h";
+"Weekly limit" = "Limite semanal";

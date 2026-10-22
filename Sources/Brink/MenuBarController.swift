@@ -52,16 +52,20 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         guard let button = statusItem.button else { return }
         let snap = snapshots.first { $0.id == chosen && !$0.isDemo }
         button.toolTip = snap.map { "Brink · \($0.displayName)" } ?? "Brink"
+        // With an account picked the number alone is the status item; the icon
+        // only shows when there's nothing to show, so the item stays clickable.
         guard let percent = snap?.primary?.usedPercent else {
+            button.image = Self.icon
             button.attributedTitle = NSAttributedString(string: "")
             button.imagePosition = .imageOnly
             return
         }
-        button.imagePosition = .imageLeading
+        button.image = nil
+        button.imagePosition = .noImage
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .medium)
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .baselineOffset: 0.5]
         if percent >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
-        button.attributedTitle = NSAttributedString(string: " \(Int(percent.rounded()))%", attributes: attributes)
+        button.attributedTitle = NSAttributedString(string: "\(Int(percent.rounded()))%", attributes: attributes)
     }
 
     // MARK: Popover
