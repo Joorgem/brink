@@ -1,6 +1,11 @@
 import SwiftUI
 import AppKit
 
+// Design: native macOS popover (Liquid Glass on macOS 26, the system material
+// before that). Content stays flat and uses vibrant system colours; only the
+// controls (refresh, settings, +) are glass, as Apple's guidelines suggest.
+// Accounts sit in one grouped list per provider, like System Settings.
+
 // MARK: - Popover root
 
 struct PopoverView: View {
@@ -10,17 +15,17 @@ struct PopoverView: View {
     @State private var adding: ProviderKind?
     @State private var contentHeight: CGFloat = 0
 
-    static let width: CGFloat = 340
-    private static let maxListHeight: CGFloat = 520
+    static let width: CGFloat = 320
+    private static let maxListHeight: CGFloat = 560
     let palette = Palette.popover
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             if let kind = adding {
                 AddAccountForm(kind: kind, accounts: accounts) { adding = nil }
-                    .padding(14)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
             } else {
                 accountList
             }
@@ -33,8 +38,9 @@ struct PopoverView: View {
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Text("Brink").font(.system(size: 13, weight: .semibold))
+        HStack(spacing: 6) {
+            Text("Brink")
+                .font(.system(size: 13, weight: .semibold))
             Spacer()
             // Refresh + how old the numbers are, e.g. "↻ 1 min".
             Button { store.refreshAll() } label: {
@@ -46,28 +52,30 @@ struct PopoverView: View {
                                    : .default, value: store.isRefreshing)
                     if let last = store.lastRefresh {
                         TimelineView(.periodic(from: .now, by: 30)) { _ in
-                            Text(Self.age(of: last))
-                                .font(.system(size: 11))
-                                .monospacedDigit()
+                            Text(Self.age(of: last)).monospacedDigit()
                         }
                     }
                 }
-                .contentShape(Rectangle())
+                .font(.system(size: 11, weight: .medium))
             }
-            .buttonStyle(.plain)
+            .glassControl()
             .help(L("Refresh now"))
             Menu {
                 SettingsMenuItems(store: store, themeStore: themeStore)
             } label: {
                 Image(systemName: "gearshape")
+                    .font(.system(size: 11, weight: .medium))
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
             .menuIndicator(.hidden)
+            .glassControl()
             .fixedSize()
         }
-        .foregroundColor(palette.soft)
+        .controlSize(.small)
+        .foregroundStyle(.secondary)
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     /// "now", "3 min", "2 h".
@@ -84,13 +92,14 @@ struct PopoverView: View {
         // Every provider gets a header with its "+", even with no accounts yet,
         // so that's the one place to add an account.
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 ForEach(ProviderKind.allCases) { kind in
                     ProviderSection(kind: kind, list: accounts.accounts(for: kind), store: store,
                                     accounts: accounts, themeStore: themeStore, palette: palette) { adding = kind }
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 14)
             .background(GeometryReader { geo in
                 Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
             })
@@ -105,6 +114,18 @@ private struct ContentHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
+extension View {
+    /// Liquid Glass button on macOS 26, a plain borderless one before.
+    @ViewBuilder
+    func glassControl() -> some View {
+        if #available(macOS 26, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.borderless)
+        }
+    }
+}
+
 // MARK: - Provider section
 
 struct ProviderSection: View {
@@ -117,92 +138,79 @@ struct ProviderSection: View {
     var onAdd: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                ProviderIcon(id: kind.rawValue, size: 13, color: palette.fg)
-                Text(kind.displayName).font(.system(size: 12, weight: .semibold))
+                ProviderIcon(id: kind.rawValue, size: 12, color: palette.muted)
+                Text(kind.displayName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Button(action: onAdd) { Image(systemName: "plus") }
-                    .buttonStyle(.plain)
-                    .foregroundColor(palette.soft)
-                    .disabled(!accounts.canAdd(kind))
-                    .help(accounts.canAdd(kind)
-                          ? L("Add account")
-                          : L("Up to %d accounts per provider", AccountStore.maxPerProvider))
+                Button(action: onAdd) {
+                    Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
+                }
+                .glassControl()
+                .controlSize(.mini)
+                .disabled(!accounts.canAdd(kind))
+                .help(accounts.canAdd(kind)
+                      ? L("Add account")
+                      : L("Up to %d accounts per provider", AccountStore.maxPerProvider))
             }
-            .opacity(list.isEmpty ? 0.55 : 1)
-            ForEach(list) { account in
-                AccountCard(account: account, snapshot: store.snapshot(for: account),
-                            accounts: accounts, themeStore: themeStore, palette: palette)
+            .padding(.horizontal, 4)
+            .opacity(list.isEmpty ? 0.6 : 1)
+
+            if !list.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(list.enumerated()), id: \.element.id) { index, account in
+                        if index > 0 {
+                            Divider().padding(.leading, 12)
+                        }
+                        AccountRow(account: account, snapshot: store.snapshot(for: account),
+                                   accounts: accounts, themeStore: themeStore, palette: palette)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(0.045)))
             }
         }
     }
 }
 
-// MARK: - Account card
+// MARK: - Account row
 
-struct AccountCard: View {
+struct AccountRow: View {
     let account: Account
     let snapshot: ProviderSnapshot?
     @ObservedObject var accounts: AccountStore
     @ObservedObject var themeStore: ThemeStore
     let palette: Palette
     @State private var renaming = false
+    @State private var newName = ""
+    @State private var hovering = false
 
     private var isInMenuBar: Bool { themeStore.menuBarAccount == account.id.uuidString }
-    @State private var newName = ""
+    private var hasData: Bool { snapshot.map { !$0.windows.isEmpty && !$0.isDemo } ?? false }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                if renaming {
-                    TextField(L("Name"), text: $newName, onCommit: commitRename)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11.5))
-                } else {
-                    Text(account.name)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .lineLimit(1)
-                    if let detail = sourceDetail {
-                        Text(detail)
-                            .font(.system(size: 10))
-                            .foregroundColor(palette.muted)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            titleRow
+            if let snapshot, hasData {
+                if let primary = snapshot.primary {
+                    UsageBar(fraction: primary.fraction,
+                             color: UsageColor.color(for: snapshot, percent: primary.usedPercent),
+                             height: 5)
+                    Text([L(primary.label), primary.resetText?.lowercasedFirst].compactMap { $0 }
+                            .joined(separator: " · "))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 4)
-                if isInMenuBar {
-                    Image(systemName: "menubar.rectangle")
-                        .font(.system(size: 10))
-                        .foregroundColor(palette.muted)
-                        .help(L("Shown in the menu bar"))
-                }
-                Menu {
-                    Button(isInMenuBar ? L("Hide from menu bar") : L("Show in menu bar")) {
-                        themeStore.menuBarAccount = isInMenuBar ? "" : account.id.uuidString
-                    }
-                    Divider()
-                    Button(L("Rename")) { newName = account.name; renaming = true }
-                    Button(L("Remove"), role: .destructive) { accounts.remove(account.id) }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .foregroundColor(palette.muted)
-            }
-
-            if let snapshot, !snapshot.windows.isEmpty, !snapshot.isDemo {
-                ForEach(snapshot.windows) { window in
-                    UsageRow(window: window, color: UsageColor.color(for: snapshot, percent: window.usedPercent),
-                             palette: palette)
+                ForEach(snapshot.windows.dropFirst()) { window in
+                    SecondaryUsageRow(window: window,
+                                      color: UsageColor.color(for: snapshot, percent: window.usedPercent))
                 }
                 if let error = snapshot.error {
                     Text(error)
                         .font(.system(size: 10))
-                        .foregroundColor(.orange)
+                        .foregroundStyle(.orange)
                         .lineLimit(2)
                 }
                 // "What used it": only for the default Claude login, whose transcripts Brink reads.
@@ -213,13 +221,66 @@ struct AccountCard: View {
             } else {
                 Text(statusText)
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.muted)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(palette.track.opacity(0.5)))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .contextMenu { actions }
+    }
+
+    private var titleRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if renaming {
+                TextField(L("Name"), text: $newName, onCommit: commitRename)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+            } else {
+                Text(account.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                if let detail = sourceDetail {
+                    Text(detail)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            Spacer(minLength: 4)
+            if isInMenuBar {
+                Image(systemName: "menubar.arrow.up.rectangle")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .help(L("Shown in the menu bar"))
+            }
+            Menu { actions } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .opacity(hovering ? 1 : 0)
+            if let snapshot, hasData, let primary = snapshot.primary {
+                Text("\(Int(primary.usedPercent.rounded()))%")
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        Button(isInMenuBar ? L("Hide from menu bar") : L("Show in menu bar")) {
+            themeStore.menuBarAccount = isInMenuBar ? "" : account.id.uuidString
+        }
+        Divider()
+        Button(L("Rename")) { newName = account.name; renaming = true }
+        Button(L("Remove"), role: .destructive) { accounts.remove(account.id) }
     }
 
     private var sourceDetail: String? {
@@ -248,36 +309,44 @@ struct AccountCard: View {
     }
 }
 
-struct UsageRow: View {
+/// "All models   ▬▬░░░░  22%"
+struct SecondaryUsageRow: View {
     let window: UsageWindow
     let color: Color
-    let palette: Palette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(L(window.label))
-                    .font(.system(size: 11))
-                Spacer()
-                if let reset = window.resetText {
-                    Text(reset)
-                        .font(.system(size: 9.5))
-                        .foregroundColor(palette.muted)
-                }
-                Text("\(Int(window.usedPercent.rounded()))%")
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
-                    .frame(minWidth: 34, alignment: .trailing)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(palette.barTrack)
-                    Capsule().fill(color)
-                        .frame(width: max(4, geo.size.width * window.fraction))
-                }
-            }
-            .frame(height: 4)
+        HStack(spacing: 8) {
+            Text(L(window.label))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            UsageBar(fraction: window.fraction, color: color, height: 3)
+                .frame(width: 64)
+            Text("\(Int(window.usedPercent.rounded()))%")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .frame(minWidth: 32, alignment: .trailing)
         }
+        .help(window.resetText ?? "")
+    }
+}
+
+struct UsageBar: View {
+    let fraction: Double
+    let color: Color
+    var height: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.1))
+                Capsule().fill(color)
+                    .frame(width: max(height, geo.size.width * fraction))
+            }
+        }
+        .frame(height: height)
+        .animation(.easeOut(duration: 0.4), value: fraction)
     }
 }
 
