@@ -45,6 +45,11 @@ struct ProviderSnapshot: Identifiable {
 
     var primary: UsageWindow? { windows.first }
 
+    /// The week-long window: Claude's "All models", Codex's "Weekly limit".
+    var weekly: UsageWindow? {
+        windows.first { $0.label == "All models" || $0.label == "Weekly limit" }
+    }
+
     /// "Claude · Work" — used in notifications, where several accounts can share a provider.
     var displayName: String {
         accountName.isEmpty || accountName == name ? name : "\(name) · \(accountName)"
@@ -93,8 +98,8 @@ final class UsageStore: ObservableObject {
 
     init(accounts accountStore: AccountStore) {
         self.accountStore = accountStore
-        sync(accountStore.accounts, fetchNew: false)
-        accountsObserver = accountStore.$accounts
+        sync(accountStore.activeAccounts, fetchNew: false)
+        accountsObserver = accountStore.$activeAccounts
             .dropFirst()
             .sink { [weak self] list in
                 Task { @MainActor [weak self] in self?.sync(list, fetchNew: true) }

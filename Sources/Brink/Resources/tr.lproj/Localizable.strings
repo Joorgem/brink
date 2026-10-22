@@ -126,3 +126,8 @@
 "now" = "now";
 "%d min" = "%d min";
 "%d h" = "%d h";
+
+/* Menu bar metric, footer */
+"Both" = "İkisi de";
+"Menu bar shows" = "Menü çubuğunda göster";
+"Settings" = "Ayarlar";

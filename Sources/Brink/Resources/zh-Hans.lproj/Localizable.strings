@@ -115,3 +115,8 @@
 "now" = "now";
 "%d min" = "%d min";
 "%d h" = "%d h";
+
+/* Menu bar metric, footer */
+"Both" = "两者";
+"Menu bar shows" = "菜单栏显示";
+"Settings" = "设置";

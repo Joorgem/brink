@@ -112,10 +112,33 @@ struct Account: Codable, Identifiable, Hashable {
 final class AccountStore: ObservableObject {
     static let maxPerProvider = 5
     private static let key = "accounts"
+    private static let hiddenKey = "hiddenProviders"
 
-    @Published private(set) var accounts: [Account]
+    @Published private(set) var accounts: [Account] {
+        didSet { updateActive() }
+    }
+
+    /// Providers turned off in Settings: their section, accounts and fetches go
+    /// away, but the accounts are kept for when the provider is turned back on.
+    /// Cursor starts off; most people only use one or two of the CLIs.
+    @Published private(set) var hiddenProviders: Set<ProviderKind> {
+        didSet {
+            UserDefaults.standard.set(hiddenProviders.map(\.rawValue), forKey: Self.hiddenKey)
+            updateActive()
+        }
+    }
+
+    /// The accounts of the providers that are on. The usage store follows this.
+    @Published private(set) var activeAccounts: [Account] = []
+
+    var visibleKinds: [ProviderKind] { ProviderKind.allCases.filter { !hiddenProviders.contains($0) } }
 
     init() {
+        if let raw = UserDefaults.standard.stringArray(forKey: Self.hiddenKey) {
+            hiddenProviders = Set(raw.compactMap(ProviderKind.init(rawValue:)))
+        } else {
+            hiddenProviders = [.cursor]
+        }
         if let data = UserDefaults.standard.data(forKey: Self.key),
            let saved = try? JSONDecoder().decode([Account].self, from: data) {
             accounts = saved
@@ -123,6 +146,22 @@ final class AccountStore: ObservableObject {
             accounts = Self.initialAccounts()
             save()
         }
+        updateActive()
+    }
+
+    func isEnabled(_ kind: ProviderKind) -> Bool { !hiddenProviders.contains(kind) }
+
+    /// At least one provider stays on, so the popover is never empty.
+    func setEnabled(_ kind: ProviderKind, _ enabled: Bool) {
+        if enabled {
+            hiddenProviders.remove(kind)
+        } else if visibleKinds.count > 1 {
+            hiddenProviders.insert(kind)
+        }
+    }
+
+    private func updateActive() {
+        activeAccounts = accounts.filter { !hiddenProviders.contains($0.provider) }
     }
 
     /// First launch: one account per CLI that is already signed in on this Mac.

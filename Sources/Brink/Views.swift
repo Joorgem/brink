@@ -79,6 +79,7 @@ struct ProviderIcon: View {
 
 struct SettingsMenuItems: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject var accounts: AccountStore
     @ObservedObject var themeStore: ThemeStore
 
     var body: some View {
@@ -88,6 +89,18 @@ struct SettingsMenuItems: View {
             Text(L("Icon only")).tag("")
             Divider()
             ForEach(store.snapshots) { Text($0.displayName).tag($0.id) }
+        }
+        Picker(L("Menu bar shows"), selection: $themeStore.menuBarMetric) {
+            ForEach(ThemeStore.MenuBarMetric.allCases) { Text($0.title).tag($0) }
+        }
+        Menu(L("Providers")) {
+            ForEach(ProviderKind.allCases) { kind in
+                Toggle(kind.displayName, isOn: Binding(
+                    get: { accounts.isEnabled(kind) },
+                    set: { accounts.setEnabled(kind, $0) }
+                ))
+                .disabled(accounts.isEnabled(kind) && accounts.visibleKinds.count == 1)
+            }
         }
         Picker(L("Language"), selection: $themeStore.language) {
             Text(L("System default")).tag("")

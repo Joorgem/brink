@@ -6,6 +6,20 @@ import AppKit
 @MainActor
 final class ThemeStore: ObservableObject {
     private static let menuBarKey = "menuBarAccount"
+    private static let metricKey = "menuBarMetric"
+
+    /// Which limit of the chosen account the menu bar shows.
+    enum MenuBarMetric: String, CaseIterable, Identifiable {
+        case session, weekly, both
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .session: return L("Current session")
+            case .weekly: return L("Weekly limit")
+            case .both: return L("Both")
+            }
+        }
+    }
 
     /// "" = system default; otherwise a code from L10n.available. Changing it
     /// re-renders every view (they observe this store), so it applies instantly.
@@ -19,8 +33,14 @@ final class ThemeStore: ObservableObject {
         didSet { UserDefaults.standard.set(menuBarAccount, forKey: Self.menuBarKey) }
     }
 
+    @Published var menuBarMetric: MenuBarMetric {
+        didSet { UserDefaults.standard.set(menuBarMetric.rawValue, forKey: Self.metricKey) }
+    }
+
     init(defaultMenuBarAccount: String) {
         menuBarAccount = UserDefaults.standard.string(forKey: Self.menuBarKey) ?? defaultMenuBarAccount
+        menuBarMetric = UserDefaults.standard.string(forKey: Self.metricKey)
+            .flatMap(MenuBarMetric.init(rawValue:)) ?? .session
     }
 }
 

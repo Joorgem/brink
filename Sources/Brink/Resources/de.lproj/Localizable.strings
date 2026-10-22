@@ -115,3 +115,8 @@
 "now" = "now";
 "%d min" = "%d min";
 "%d h" = "%d h";
+
+/* Menu bar metric, footer */
+"Both" = "Beide";
+"Menu bar shows" = "Menüleiste zeigt";
+"Settings" = "Einstellungen";

@@ -3,8 +3,8 @@ import AppKit
 
 // Design: native macOS popover (Liquid Glass on macOS 26, the system material
 // before that). Content stays flat and uses vibrant system colours; only the
-// controls (refresh, settings, +) are glass, as Apple's guidelines suggest.
-// Accounts sit in one grouped list per provider, like System Settings.
+// controls are plain borderless icons. Accounts sit in one grouped list per
+// provider, like System Settings; refresh and settings sit in a footer.
 
 // The macOS 27 SDK declares a `State` macro whose plugin ships only with full
 // Xcode; a typealias keeps the property wrapper so Command Line Tools build too.
@@ -25,13 +25,13 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
             if let kind = adding {
                 AddAccountForm(kind: kind, accounts: accounts) { adding = nil }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 14)
+                    .padding(14)
             } else {
                 accountList
+                Divider().padding(.horizontal, 12)
+                footer
             }
         }
         .frame(width: Self.width)
@@ -39,13 +39,10 @@ struct PopoverView: View {
         .id(themeStore.language)
     }
 
-    // MARK: Header
+    // MARK: Footer
 
-    private var header: some View {
-        HStack(spacing: 6) {
-            Text("Brink")
-                .font(.system(size: 13, weight: .semibold))
-            Spacer()
+    private var footer: some View {
+        HStack(spacing: 10) {
             // Refresh + how old the numbers are, e.g. "↻ 1 min".
             Button { store.refreshAll() } label: {
                 HStack(spacing: 4) {
@@ -62,24 +59,24 @@ struct PopoverView: View {
                 }
                 .font(.system(size: 11, weight: .medium))
             }
-            .glassControl()
+            .buttonStyle(.borderless)
             .help(L("Refresh now"))
+            Spacer()
             Menu {
-                SettingsMenuItems(store: store, themeStore: themeStore)
+                SettingsMenuItems(store: store, accounts: accounts, themeStore: themeStore)
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
             }
-            .menuStyle(.button)
+            .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .glassControl()
             .fixedSize()
+            .help(L("Settings"))
         }
         .controlSize(.small)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
     }
 
     /// "now", "3 min", "2 h".
@@ -97,13 +94,13 @@ struct PopoverView: View {
         // so that's the one place to add an account.
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(ProviderKind.allCases) { kind in
+                ForEach(accounts.visibleKinds) { kind in
                     ProviderSection(kind: kind, list: accounts.accounts(for: kind), store: store,
                                     accounts: accounts, themeStore: themeStore, palette: palette) { adding = kind }
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.bottom, 14)
+            .padding(.vertical, 14)
             .background(GeometryReader { geo in
                 Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
             })
@@ -116,18 +113,6 @@ struct PopoverView: View {
 private struct ContentHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-}
-
-extension View {
-    /// Liquid Glass button on macOS 26, a plain borderless one before.
-    @ViewBuilder
-    func glassControl() -> some View {
-        if #available(macOS 26, *) {
-            self.buttonStyle(.glass)
-        } else {
-            self.buttonStyle(.borderless)
-        }
-    }
 }
 
 // MARK: - Provider section
@@ -150,10 +135,10 @@ struct ProviderSection: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(action: onAdd) {
-                    Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "plus").font(.system(size: 11, weight: .semibold))
                 }
-                .glassControl()
-                .controlSize(.mini)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
                 .disabled(!accounts.canAdd(kind))
                 .help(accounts.canAdd(kind)
                       ? L("Add account")

@@ -31,9 +31,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
 
         observer = store.$snapshots
-            .combineLatest(themeStore.$menuBarAccount)
-            .sink { [weak self] snapshots, chosen in
-                self?.updateButton(snapshots, chosen: chosen)
+            .combineLatest(themeStore.$menuBarAccount, themeStore.$menuBarMetric)
+            .sink { [weak self] snapshots, chosen, metric in
+                self?.updateButton(snapshots, chosen: chosen, metric: metric)
             }
     }
 
@@ -46,15 +46,27 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         return image
     }()
 
-    /// Title = the primary window (usually the current session) of the account
-    /// the user picked; icon only when none is picked or it has no data yet.
-    private func updateButton(_ snapshots: [ProviderSnapshot], chosen: String) {
+    /// Title = the limit(s) the user picked for the chosen account: "73%" for
+    /// one, "5h 73%  7d 12%" for both. Icon only when nothing is picked or there
+    /// is no data yet.
+    private func updateButton(_ snapshots: [ProviderSnapshot], chosen: String,
+                              metric: ThemeStore.MenuBarMetric) {
         guard let button = statusItem.button else { return }
         let snap = snapshots.first { $0.id == chosen && !$0.isDemo }
-        button.toolTip = snap.map { "Brink · \($0.displayName)" } ?? "Brink"
+        let parts: [(tag: String, window: UsageWindow)]
+        switch metric {
+        case .session: parts = snap?.primary.map { [("", $0)] } ?? []
+        case .weekly: parts = (snap?.weekly ?? snap?.primary).map { [("", $0)] } ?? []
+        case .both:
+            parts = [snap?.primary.map { ("5h", $0) }, snap?.weekly.map { ("7d", $0) }].compactMap { $0 }
+        }
+        button.toolTip = snap.map { snap in
+            (["Brink · \(snap.displayName)"] + parts.map { "\(L($0.window.label)): \(Int($0.window.usedPercent.rounded()))%" })
+                .joined(separator: "\n")
+        } ?? "Brink"
         // With an account picked the number alone is the status item; the icon
         // only shows when there's nothing to show, so the item stays clickable.
-        guard let percent = snap?.primary?.usedPercent else {
+        guard !parts.isEmpty else {
             button.image = Self.icon
             button.attributedTitle = NSAttributedString(string: "")
             button.imagePosition = .imageOnly
@@ -62,10 +74,25 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
         button.image = nil
         button.imagePosition = .noImage
-        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .medium)
-        var attributes: [NSAttributedString.Key: Any] = [.font: font, .baselineOffset: 0.5]
-        if percent >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
-        button.attributedTitle = NSAttributedString(string: "\(Int(percent.rounded()))%", attributes: attributes)
+        let size = NSFont.systemFontSize - 1
+        let number = NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium)
+        let tag = NSFont.systemFont(ofSize: size - 3, weight: .semibold)
+        let title = NSMutableAttributedString()
+        // Single-part titles drop the tag, since the setting already says which limit it is.
+        let tagged = parts.count > 1
+        for (i, part) in parts.enumerated() {
+            if i > 0 { title.append(NSAttributedString(string: "  ", attributes: [.font: number])) }
+            if tagged {
+                title.append(NSAttributedString(string: part.tag + " ", attributes: [
+                    .font: tag, .baselineOffset: 1, .foregroundColor: NSColor.secondaryLabelColor,
+                ]))
+            }
+            let percent = part.window.usedPercent
+            var attributes: [NSAttributedString.Key: Any] = [.font: number, .baselineOffset: 0.5]
+            if percent >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
+            title.append(NSAttributedString(string: "\(Int(percent.rounded()))%", attributes: attributes))
+        }
+        button.attributedTitle = title
     }
 
     // MARK: Popover
