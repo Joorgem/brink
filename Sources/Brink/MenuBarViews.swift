@@ -24,26 +24,35 @@ struct PopoverView: View {
             } else {
                 accountList
             }
-            Divider()
-            footer
         }
         .frame(width: Self.width)
         // Re-render on language change.
         .id(themeStore.language)
     }
 
-    // MARK: Header / footer
+    // MARK: Header
 
     private var header: some View {
         HStack(spacing: 10) {
             Text("Brink").font(.system(size: 13, weight: .semibold))
             Spacer()
+            // Refresh + how old the numbers are, e.g. "↻ 1 min".
             Button { store.refreshAll() } label: {
-                Image(systemName: "arrow.clockwise")
-                    .rotationEffect(.degrees(store.isRefreshing ? 360 : 0))
-                    .animation(store.isRefreshing
-                               ? .linear(duration: 1).repeatForever(autoreverses: false)
-                               : .default, value: store.isRefreshing)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                        .rotationEffect(.degrees(store.isRefreshing ? 360 : 0))
+                        .animation(store.isRefreshing
+                                   ? .linear(duration: 1).repeatForever(autoreverses: false)
+                                   : .default, value: store.isRefreshing)
+                    if let last = store.lastRefresh {
+                        TimelineView(.periodic(from: .now, by: 30)) { _ in
+                            Text(Self.age(of: last))
+                                .font(.system(size: 11))
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(L("Refresh now"))
@@ -61,59 +70,24 @@ struct PopoverView: View {
         .padding(.vertical, 10)
     }
 
-    private var footer: some View {
-        HStack {
-            if let last = store.lastRefresh {
-                Text(L("Updated %@", Self.relative(last)))
-            }
-            Spacer()
-            addMenu
-        }
-        .font(.system(size: 11))
-        .foregroundColor(palette.muted)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-    }
-
-    private var addMenu: some View {
-        Menu {
-            ForEach(ProviderKind.allCases) { kind in
-                Button(kind.displayName) {
-                    adding = kind
-                }
-                .disabled(!accounts.canAdd(kind))
-            }
-        } label: {
-            Label(L("Add account"), systemImage: "plus")
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .disabled(adding != nil)
-    }
-
-    static func relative(_ date: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .short
-        if !L10n.override.isEmpty { f.locale = Locale(identifier: L10n.override) }
-        return f.localizedString(for: date, relativeTo: Date())
+    /// "now", "3 min", "2 h".
+    static func age(of date: Date) -> String {
+        let seconds = max(0, Date().timeIntervalSince(date))
+        if seconds < 60 { return L("now") }
+        if seconds < 3600 { return L("%d min", Int(seconds / 60)) }
+        return L("%d h", Int(seconds / 3600))
     }
 
     // MARK: List
 
     private var accountList: some View {
-        ScrollView {
+        // Every provider gets a header with its "+", even with no accounts yet,
+        // so that's the one place to add an account.
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                if accounts.accounts.isEmpty {
-                    emptyState
-                } else {
-                    ForEach(ProviderKind.allCases) { kind in
-                        let list = accounts.accounts(for: kind)
-                        if !list.isEmpty {
-                            ProviderSection(kind: kind, list: list, store: store, accounts: accounts,
-                                            themeStore: themeStore, palette: palette) { adding = kind }
-                        }
-                    }
+                ForEach(ProviderKind.allCases) { kind in
+                    ProviderSection(kind: kind, list: accounts.accounts(for: kind), store: store,
+                                    accounts: accounts, themeStore: themeStore, palette: palette) { adding = kind }
                 }
             }
             .padding(14)
@@ -123,17 +97,6 @@ struct PopoverView: View {
         }
         .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
         .frame(height: min(max(contentHeight, 60), Self.maxListHeight))
-    }
-
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L("No accounts yet"))
-                .font(.system(size: 12.5, weight: .semibold))
-            Text(L("Add a Claude, Codex or Cursor account to see its limits here."))
-                .font(.system(size: 11.5))
-                .foregroundColor(palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 }
 
@@ -167,6 +130,7 @@ struct ProviderSection: View {
                           ? L("Add account")
                           : L("Up to %d accounts per provider", AccountStore.maxPerProvider))
             }
+            .opacity(list.isEmpty ? 0.55 : 1)
             ForEach(list) { account in
                 AccountCard(account: account, snapshot: store.snapshot(for: account),
                             accounts: accounts, themeStore: themeStore, palette: palette)

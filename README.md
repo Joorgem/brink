@@ -18,7 +18,7 @@ when it closes.
 
 ## Multiple accounts (macOS)
 
-Add up to **5 accounts per provider** from the popover (**+ Add account**). The
+Add up to **5 accounts per provider** with the **+** next to each provider in the popover. The
 list updates as soon as you add, rename or remove one.
 
 - **Claude Code / Codex:** each extra account uses its own login folder, so all of

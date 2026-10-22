@@ -112,3 +112,6 @@
 "Uses the account signed in to cursor-agent on this Mac." = "Uses the account signed in to cursor-agent on this Mac.";
 "5h limit" = "5h limit";
 "Weekly limit" = "Weekly limit";
+"now" = "now";
+"%d min" = "%d min";
+"%d h" = "%d h";
