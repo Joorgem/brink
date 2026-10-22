@@ -11,7 +11,7 @@
 **Claude Code**, **Codex** and **Cursor** usage limits at a glance, for every
 account you use, and, on macOS, **which project spent them**. **For macOS and Windows.**
 
-On macOS, Brink is an icon in the menu bar with your highest usage next to it.
+On macOS, Brink is an icon in the menu bar, with the usage of the account you pick next to it.
 Click it and a popover lists each account's session and weekly limits with reset
 times. Nothing else stays open: the popover is built when you click and released
 when it closes.

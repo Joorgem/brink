@@ -31,9 +31,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         }
 
         observer = store.$snapshots
-            .combineLatest(themeStore.$showPercentInMenuBar)
-            .sink { [weak self] snapshots, showPercent in
-                self?.updateButton(snapshots, showPercent: showPercent)
+            .combineLatest(themeStore.$menuBarAccount)
+            .sink { [weak self] snapshots, chosen in
+                self?.updateButton(snapshots, chosen: chosen)
             }
     }
 
@@ -46,15 +46,13 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         return image
     }()
 
-    /// Title = the highest primary window across accounts with real data, so the
-    /// account closest to its limit is what you see without opening anything.
-    private func updateButton(_ snapshots: [ProviderSnapshot], showPercent: Bool) {
+    /// Title = the primary window (usually the current session) of the account
+    /// the user picked; icon only when none is picked or it has no data yet.
+    private func updateButton(_ snapshots: [ProviderSnapshot], chosen: String) {
         guard let button = statusItem.button else { return }
-        let highest = snapshots
-            .filter { !$0.isDemo }
-            .compactMap { $0.primary?.usedPercent }
-            .max()
-        guard showPercent, let highest else {
+        let snap = snapshots.first { $0.id == chosen && !$0.isDemo }
+        button.toolTip = snap.map { "Brink · \($0.displayName)" } ?? "Brink"
+        guard let percent = snap?.primary?.usedPercent else {
             button.attributedTitle = NSAttributedString(string: "")
             button.imagePosition = .imageOnly
             return
@@ -62,8 +60,8 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         button.imagePosition = .imageLeading
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .medium)
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .baselineOffset: 0.5]
-        if highest >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
-        button.attributedTitle = NSAttributedString(string: " \(Int(highest.rounded()))%", attributes: attributes)
+        if percent >= 90 { attributes[.foregroundColor] = NSColor.systemRed }
+        button.attributedTitle = NSAttributedString(string: " \(Int(percent.rounded()))%", attributes: attributes)
     }
 
     // MARK: Popover

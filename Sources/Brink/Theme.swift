@@ -5,7 +5,7 @@ import AppKit
 
 @MainActor
 final class ThemeStore: ObservableObject {
-    private static let percentKey = "showPercentInMenuBar"
+    private static let menuBarKey = "menuBarAccount"
 
     /// "" = system default; otherwise a code from L10n.available. Changing it
     /// re-renders every view (they observe this store), so it applies instantly.
@@ -13,10 +13,14 @@ final class ThemeStore: ObservableObject {
         didSet { L10n.override = language }
     }
 
-    /// Show the highest usage next to the menu bar icon ("73%").
-    @Published var showPercentInMenuBar: Bool =
-        UserDefaults.standard.object(forKey: ThemeStore.percentKey) as? Bool ?? true {
-        didSet { UserDefaults.standard.set(showPercentInMenuBar, forKey: Self.percentKey) }
+    /// The account whose usage sits next to the menu bar icon ("73%"), by
+    /// account id. "" = icon only. Defaults to the first account.
+    @Published var menuBarAccount: String {
+        didSet { UserDefaults.standard.set(menuBarAccount, forKey: Self.menuBarKey) }
+    }
+
+    init(defaultMenuBarAccount: String) {
+        menuBarAccount = UserDefaults.standard.string(forKey: Self.menuBarKey) ?? defaultMenuBarAccount
     }
 }
 

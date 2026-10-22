@@ -111,7 +111,7 @@ struct PopoverView: View {
                         let list = accounts.accounts(for: kind)
                         if !list.isEmpty {
                             ProviderSection(kind: kind, list: list, store: store, accounts: accounts,
-                                            palette: palette) { adding = kind }
+                                            themeStore: themeStore, palette: palette) { adding = kind }
                         }
                     }
                 }
@@ -149,6 +149,7 @@ struct ProviderSection: View {
     let list: [Account]
     @ObservedObject var store: UsageStore
     @ObservedObject var accounts: AccountStore
+    @ObservedObject var themeStore: ThemeStore
     let palette: Palette
     var onAdd: () -> Void
 
@@ -171,7 +172,7 @@ struct ProviderSection: View {
             }
             ForEach(list) { account in
                 AccountCard(account: account, snapshot: store.snapshot(for: account),
-                            accounts: accounts, palette: palette)
+                            accounts: accounts, themeStore: themeStore, palette: palette)
             }
         }
     }
@@ -183,8 +184,11 @@ struct AccountCard: View {
     let account: Account
     let snapshot: ProviderSnapshot?
     @ObservedObject var accounts: AccountStore
+    @ObservedObject var themeStore: ThemeStore
     let palette: Palette
     @State private var renaming = false
+
+    private var isInMenuBar: Bool { themeStore.menuBarAccount == account.id.uuidString }
     @State private var newName = ""
 
     var body: some View {
@@ -207,7 +211,17 @@ struct AccountCard: View {
                     }
                 }
                 Spacer(minLength: 4)
+                if isInMenuBar {
+                    Image(systemName: "menubar.rectangle")
+                        .font(.system(size: 10))
+                        .foregroundColor(palette.muted)
+                        .help(L("Shown in the menu bar"))
+                }
                 Menu {
+                    Button(isInMenuBar ? L("Hide from menu bar") : L("Show in menu bar")) {
+                        themeStore.menuBarAccount = isInMenuBar ? "" : account.id.uuidString
+                    }
+                    Divider()
                     Button(L("Rename")) { newName = account.name; renaming = true }
                     Button(L("Remove"), role: .destructive) { accounts.remove(account.id) }
                 } label: {

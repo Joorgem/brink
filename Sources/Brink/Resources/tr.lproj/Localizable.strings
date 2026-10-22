@@ -109,7 +109,10 @@
 "Session token missing — remove this account and add it again" = "Session token missing — remove this account and add it again";
 "Session token" = "Session token";
 "session token" = "session token";
-"Show percentage in menu bar" = "Show percentage in menu bar";
+"Show in menu bar" = "Show in menu bar";
+"Hide from menu bar" = "Hide from menu bar";
+"Icon only" = "Icon only";
+"Shown in the menu bar" = "Shown in the menu bar";
 "Sign in with: %@" = "Sign in with: %@";
 "That doesn't look like a session token" = "That doesn't look like a session token";
 "This Mac's login" = "This Mac's login";

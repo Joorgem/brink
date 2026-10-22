@@ -97,7 +97,10 @@
 "Session token missing — remove this account and add it again" = "Token de sessão ausente — remova esta conta e adicione de novo";
 "Session token" = "Token de sessão";
 "session token" = "token de sessão";
-"Show percentage in menu bar" = "Mostrar porcentagem na barra de menus";
+"Show in menu bar" = "Mostrar na barra de menus";
+"Hide from menu bar" = "Tirar da barra de menus";
+"Icon only" = "Só o ícone";
+"Shown in the menu bar" = "Aparece na barra de menus";
 "Sign in with: %@" = "Faça login com: %@";
 "That doesn't look like a session token" = "Isso não parece um token de sessão";
 "This Mac's login" = "Login deste Mac";

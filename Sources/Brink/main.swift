@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         accounts = AccountStore()
         store = UsageStore(accounts: accounts)
-        themeStore = ThemeStore()
+        themeStore = ThemeStore(defaultMenuBarAccount: accounts.accounts.first?.id.uuidString ?? "")
         Notifier.shared.requestAuthorizationIfNeeded()
         menuBar = MenuBarController(store: store, accounts: accounts, themeStore: themeStore)
         store.startAutoRefresh(interval: 120)

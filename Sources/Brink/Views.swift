@@ -84,7 +84,11 @@ struct SettingsMenuItems: View {
     var body: some View {
         Button(L("Refresh now")) { store.refreshAll() }
         Divider()
-        Toggle(L("Show percentage in menu bar"), isOn: $themeStore.showPercentInMenuBar)
+        Picker(L("Show in menu bar"), selection: $themeStore.menuBarAccount) {
+            Text(L("Icon only")).tag("")
+            Divider()
+            ForEach(store.snapshots) { Text($0.displayName).tag($0.id) }
+        }
         Picker(L("Language"), selection: $themeStore.language) {
             Text(L("System default")).tag("")
             Divider()
