@@ -12,15 +12,20 @@ APP="$DIST/$APP_NAME.app"
 echo "==> Swift derleniyor (release, arm64 + x86_64)..."
 # Two single-arch builds + lipo: works with Command Line Tools alone
 # (`--arch a --arch b` needs full Xcode's xcbuild).
-swift build -c release --triple arm64-apple-macosx
-swift build -c release --triple x86_64-apple-macosx
+# Each binary is copied out right after its build: newer SwiftPM (swift-build
+# backend) puts every triple in the same .build/out/Products/Release folder.
+SLICES=".build/slices"
+mkdir -p "$SLICES"
+for TRIPLE in arm64-apple-macosx x86_64-apple-macosx; do
+    swift build -c release --triple "$TRIPLE"
+    BIN="$(swift build -c release --triple "$TRIPLE" --show-bin-path)/$APP_NAME"
+    cp "$BIN" "$SLICES/$TRIPLE"
+done
 
 echo "==> .app paketi oluşturuluyor..."
 rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-ARM=".build/arm64-apple-macosx/release"
-X86=".build/x86_64-apple-macosx/release"
-lipo -create "$ARM/$APP_NAME" "$X86/$APP_NAME" -output "$APP/Contents/MacOS/$APP_NAME"
+lipo -create "$SLICES/arm64-apple-macosx" "$SLICES/x86_64-apple-macosx" -output "$APP/Contents/MacOS/$APP_NAME"
 # Resources (logos, <lang>.lproj) go straight into Contents/Resources and are read
 # via Bundle.main — the standard macOS layout. (SwiftPM's Bundle.module accessor
 # only knows the build machine's path and the .app root; see issue #8.)

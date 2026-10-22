@@ -6,14 +6,18 @@ import AppKit
 // controls (refresh, settings, +) are glass, as Apple's guidelines suggest.
 // Accounts sit in one grouped list per provider, like System Settings.
 
+// The macOS 27 SDK declares a `State` macro whose plugin ships only with full
+// Xcode; a typealias keeps the property wrapper so Command Line Tools build too.
+typealias ViewState = SwiftUI.State
+
 // MARK: - Popover root
 
 struct PopoverView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var accounts: AccountStore
     @ObservedObject var themeStore: ThemeStore
-    @State private var adding: ProviderKind?
-    @State private var contentHeight: CGFloat = 0
+    @ViewState private var adding: ProviderKind?
+    @ViewState private var contentHeight: CGFloat = 0
 
     static let width: CGFloat = 320
     private static let maxListHeight: CGFloat = 560
@@ -183,9 +187,9 @@ struct AccountRow: View {
     @ObservedObject var accounts: AccountStore
     @ObservedObject var themeStore: ThemeStore
     let palette: Palette
-    @State private var renaming = false
-    @State private var newName = ""
-    @State private var hovering = false
+    @ViewState private var renaming = false
+    @ViewState private var newName = ""
+    @ViewState private var hovering = false
 
     private var isInMenuBar: Bool { themeStore.menuBarAccount == account.id.uuidString }
     private var hasData: Bool { snapshot.map { !$0.windows.isEmpty && !$0.isDemo } ?? false }
@@ -359,12 +363,12 @@ struct AddAccountForm: View {
 
     private enum Mode: Hashable { case defaultLogin, directory, sessionToken }
 
-    @State private var name = ""
-    @State private var mode: Mode = .directory
-    @State private var path = ""
-    @State private var pathEdited = false
-    @State private var token = ""
-    @State private var copied = false
+    @ViewState private var name = ""
+    @ViewState private var mode: Mode = .directory
+    @ViewState private var path = ""
+    @ViewState private var pathEdited = false
+    @ViewState private var token = ""
+    @ViewState private var copied = false
 
     let palette = Palette.popover
 
