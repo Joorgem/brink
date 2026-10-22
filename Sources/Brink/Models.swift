@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - Data model
 
@@ -30,7 +31,7 @@ struct UsageWindow: Identifiable {
 }
 
 struct ProviderSnapshot: Identifiable {
-    let id: String               // "claude", "codex"
+    var id: String               // provider id from fetch(); the store swaps in the account id
     var name: String
     var systemImage: String
     var windows: [UsageWindow]
@@ -38,8 +39,16 @@ struct ProviderSnapshot: Identifiable {
     var isDemo: Bool = false
     var accent: Color? = nil     // fixed brand color; nil = percent-based scale
     var updatedAt: Date?
+    var provider: String = ""    // "claude", "codex", "cursor"
+    var accountName: String = ""
+    var isDefaultLogin: Bool = false
 
     var primary: UsageWindow? { windows.first }
+
+    /// "Claude · Work" — used in notifications, where several accounts can share a provider.
+    var displayName: String {
+        accountName.isEmpty || accountName == name ? name : "\(name) · \(accountName)"
+    }
 }
 
 // MARK: - Ring color scale
@@ -67,20 +76,33 @@ protocol UsageProvider {
 
 // MARK: - Store
 
+/// Holds one snapshot per account, in the order the accounts were added.
+/// Follows `AccountStore`: a new account is fetched right away, a removed one
+/// disappears with its provider (and that provider's caches).
 @MainActor
 final class UsageStore: ObservableObject {
-    @Published var snapshots: [ProviderSnapshot] = []
-    @Published var lastRefresh: Date?
+    @Published private(set) var snapshots: [ProviderSnapshot] = []
+    @Published private(set) var lastRefresh: Date?
+    @Published private(set) var isRefreshing = false
 
-    private let providers: [UsageProvider]
+    private let accountStore: AccountStore
+    private var accounts: [Account] = []
+    private var providers: [UUID: UsageProvider] = [:]
     private var timer: Timer?
+    private var accountsObserver: AnyCancellable?
 
-    init(providers: [UsageProvider]) {
-        self.providers = providers
-        self.snapshots = providers.map {
-            ProviderSnapshot(id: $0.id, name: $0.id.capitalized,
-                             systemImage: "hourglass", windows: [], error: nil)
-        }
+    init(accounts accountStore: AccountStore) {
+        self.accountStore = accountStore
+        sync(accountStore.accounts, fetchNew: false)
+        accountsObserver = accountStore.$accounts
+            .dropFirst()
+            .sink { [weak self] list in
+                Task { @MainActor [weak self] in self?.sync(list, fetchNew: true) }
+            }
+    }
+
+    func snapshot(for account: Account) -> ProviderSnapshot? {
+        snapshots.first { $0.id == account.id.uuidString }
     }
 
     func startAutoRefresh(interval: TimeInterval = 120) {
@@ -89,36 +111,82 @@ final class UsageStore: ObservableObject {
             guard let self else { return }
             Task { @MainActor in self.refreshAll() }
         }
+        timer?.tolerance = interval * 0.2   // let macOS coalesce wake-ups
         refreshAll()
     }
 
-    /// Fetches every provider at once and publishes each result as it lands, so one
-    /// slow or rate-limited source never leaves the whole card blank. Rings keep
-    /// their previous values until their own provider answers.
+    /// Opening the popover refreshes only if the numbers are older than `age`.
+    func refreshIfStale(olderThan age: TimeInterval = 60) {
+        guard let last = lastRefresh else { return refreshAll() }
+        if Date().timeIntervalSince(last) > age { refreshAll() }
+    }
+
     func refreshAll() {
-        let providers = self.providers
-        let order = providers.map(\.id)
+        refresh(accounts)
+    }
+
+    /// Rebuilds the provider list after accounts change. Existing providers are
+    /// kept (with their token caches and 429 back-off); new ones get a blank
+    /// card and, when `fetchNew`, an immediate fetch.
+    private func sync(_ list: [Account], fetchNew: Bool) {
+        let previous = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
+        var kept: [UUID: UsageProvider] = [:]
+        var added: [Account] = []
+        for account in list {
+            if let existing = providers[account.id] {
+                kept[account.id] = existing
+            } else {
+                kept[account.id] = account.makeProvider()
+                added.append(account)
+            }
+        }
+        providers = kept
+        accounts = list
+        snapshots = list.map { account in
+            var snap = previous[account.id.uuidString]
+                ?? ProviderSnapshot(id: "", name: "", systemImage: "hourglass", windows: [], error: nil)
+            Self.label(&snap, with: account)
+            return snap
+        }
+        if fetchNew && !added.isEmpty { refresh(added) }
+    }
+
+    private static func label(_ snap: inout ProviderSnapshot, with account: Account) {
+        snap.id = account.id.uuidString
+        snap.provider = account.provider.rawValue
+        snap.name = account.provider.displayName
+        snap.accountName = account.name
+        snap.isDefaultLogin = account.isDefaultLogin
+    }
+
+    /// Fetches the given accounts at once and publishes each result as it lands,
+    /// so one slow or rate-limited source never leaves the others blank. Cards
+    /// keep their previous values until their own account answers.
+    private func refresh(_ targets: [Account]) {
+        let jobs = targets.compactMap { account in providers[account.id].map { (account, $0) } }
+        guard !jobs.isEmpty else { return }
+        isRefreshing = true
         Task {
-            var latest = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
-            await withTaskGroup(of: ProviderSnapshot.self) { group in
-                for provider in providers {
-                    group.addTask { await provider.fetch() }
+            await withTaskGroup(of: (Account, ProviderSnapshot).self) { group in
+                for (account, provider) in jobs {
+                    group.addTask { (account, await provider.fetch()) }
                 }
-                for await snap in group {
-                    latest[snap.id] = snap
-                    let ordered = order.compactMap { latest[$0] }
-                    await MainActor.run {
-                        self.snapshots = ordered
-                        self.lastRefresh = Date()
+                for await (account, fetched) in group {
+                    var snap = fetched
+                    Self.label(&snap, with: account)
+                    // The account may have been removed (or renamed) while we waited.
+                    guard let i = self.accounts.firstIndex(where: { $0.id == account.id }) else { continue }
+                    Self.label(&snap, with: self.accounts[i])
+                    if let j = self.snapshots.firstIndex(where: { $0.id == snap.id }) {
+                        self.snapshots[j] = snap
                     }
+                    self.lastRefresh = Date()
                 }
             }
+            isRefreshing = false
             // Notifications and limit attribution only once the picture is complete.
-            let final = order.compactMap { latest[$0] }
-            await MainActor.run {
-                Notifier.shared.observe(final)
-                CostModel.shared.observe(final)
-            }
+            Notifier.shared.observe(snapshots)
+            CostModel.shared.observe(snapshots)
         }
     }
 }

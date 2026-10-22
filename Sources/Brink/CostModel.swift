@@ -58,7 +58,8 @@ final class CostModel: ObservableObject {
     /// Called after every usage poll. Samples the limit and attributes any increase.
     func observe(_ snapshots: [ProviderSnapshot]) {
         guard let store,
-              let claude = snapshots.first(where: { $0.id == "claude" && !$0.isDemo })
+              // Transcripts are read from ~/.claude, so only the default login is attributed.
+              let claude = snapshots.first(where: { $0.provider == "claude" && $0.isDefaultLogin && !$0.isDemo })
         else { return }
 
         let samples: [(window: CostWindow, pct: Double, resetsAt: Date?)] = claude.windows.compactMap {

@@ -7,15 +7,31 @@
 [![Windows build](https://github.com/semihtalii/brink/actions/workflows/windows.yml/badge.svg)](https://github.com/semihtalii/brink/actions/workflows/windows.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Know when you're on the brink.** A tiny panel that lives on the right edge of
-your screen and shows your **Claude Code**, **Codex** and **Cursor** usage limits
-at a glance — and, on macOS, **which project spent them**. **For macOS and Windows.**
+**Know when you're on the brink.** A tiny menu bar app that shows your
+**Claude Code**, **Codex** and **Cursor** usage limits at a glance, for every
+account you use, and, on macOS, **which project spent them**. **For macOS and Windows.**
 
-Move the mouse to the thin strip on the right edge → the panel slides out.
-Hover a ring → a card shows the session limit, weekly limits and reset times.
-One line at the bottom answers the follow-up question: *what used it?*
+On macOS, Brink is an icon in the menu bar with your highest usage next to it.
+Click it and a popover lists each account's session and weekly limits with reset
+times. Nothing else stays open: the popover is built when you click and released
+when it closes.
 
-No Dock icon, no menu bar clutter. Just the edge.
+## Multiple accounts (macOS)
+
+Add up to **5 accounts per provider** from the popover (**+ Add account**). The
+list updates as soon as you add, rename or remove one.
+
+- **Claude Code / Codex:** each extra account uses its own login folder, so all of
+  them stay signed in at once. Brink shows the command to sign in once, e.g.
+  `CLAUDE_CONFIG_DIR="$HOME/.claude-work" claude` or
+  `CODEX_HOME="$HOME/.codex-work" codex login`. An alias makes it painless:
+  `alias claude-work='CLAUDE_CONFIG_DIR="$HOME/.claude-work" claude'`.
+- **Cursor:** cursor-agent keeps one login, so extra accounts take the
+  `WorkosCursorSessionToken` cookie from cursor.com, stored only on your Mac (0600).
+
+Brink never refreshes tokens itself (that could sign you out of the CLI). Each
+CLI keeps its own token fresh while you use it; an account left unused for a long
+time shows a sign-in hint until you open its CLI again.
 
 <p align="center">
   <img src="docs/demo.gif" width="720" alt="Brink in use — move to the right edge, the panel slides out, hover a ring for details">

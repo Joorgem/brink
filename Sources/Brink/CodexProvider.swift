@@ -2,8 +2,11 @@ import Foundation
 
 /// Reads the Codex CLI's OAuth token (~/.codex/auth.json) and queries the
 /// ChatGPT backend usage endpoint, as documented by the CodexBar project.
+/// Extra accounts are Codex logins in their own folder (`CODEX_HOME=<dir> codex login`).
 struct CodexProvider: UsageProvider {
     let id = "codex"
+    /// nil = $CODEX_HOME or ~/.codex.
+    var home: URL? = nil
 
     private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
@@ -11,7 +14,7 @@ struct CodexProvider: UsageProvider {
         var snap = ProviderSnapshot(id: id, name: "Codex",
                                     systemImage: "terminal",
                                     windows: [], error: nil)
-        guard let auth = Self.loadAuth() else {
+        guard let auth = Self.loadAuth(home: home) else {
             return ClaudeProvider.demoSnapshot(name: "Codex", systemImage: "terminal",
                                                note: L("Codex CLI credentials not found (~/.codex/auth.json)"))
         }
@@ -51,9 +54,8 @@ struct CodexProvider: UsageProvider {
         var accountID: String?
     }
 
-    static func loadAuth() -> Auth? {
-        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+    static func loadAuth(home: URL? = nil) -> Auth? {
+        guard let home = home ?? ProviderKind.codex.defaultDirectory else { return nil }
         let url = home.appendingPathComponent("auth.json")
         guard let data = try? Data(contentsOf: url),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {

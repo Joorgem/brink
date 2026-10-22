@@ -72,3 +72,37 @@
 "Month" = "Mês";
 "All" = "Tudo";
 "share of the work in this range" = "parte do trabalho neste período";
+
+/* Menu bar + accounts */
+"Add account" = "Adicionar conta";
+"Add %@ account" = "Adicionar conta %@";
+"Add a Claude, Codex or Cursor account to see its limits here." = "Adicione uma conta do Claude, Codex ou Cursor para ver os limites aqui.";
+"Add" = "Adicionar";
+"Cancel" = "Cancelar";
+"Another account already uses this folder" = "Outra conta já usa esta pasta";
+"Choose a login folder" = "Escolha uma pasta de login";
+"Copied" = "Copiado";
+"Copy" = "Copiar";
+"Each extra account keeps its own login folder, so you never have to sign out of the other. Sign in once in Terminal:" = "Cada conta extra tem a própria pasta de login, então você não precisa sair da outra. Faça login uma vez no Terminal:";
+"Loading…" = "Carregando…";
+"Login folder" = "Pasta de login";
+"Name (e.g. Work)" = "Nome (ex.: Trabalho)";
+"Name" = "Nome";
+"No accounts yet" = "Nenhuma conta ainda";
+"On cursor.com, open the browser's developer tools → Application → Cookies and copy the value of WorkosCursorSessionToken. It is stored only on this Mac (mode 0600)." = "No cursor.com, abra as ferramentas de desenvolvedor do navegador → Application → Cookies e copie o valor de WorkosCursorSessionToken. Ele fica salvo só neste Mac (modo 0600).";
+"Remove" = "Remover";
+"Rename" = "Renomear";
+"Separate folder" = "Pasta separada";
+"Session expired — copy a fresh WorkosCursorSessionToken from cursor.com" = "Sessão expirada — copie um WorkosCursorSessionToken novo do cursor.com";
+"Session token missing — remove this account and add it again" = "Token de sessão ausente — remova esta conta e adicione de novo";
+"Session token" = "Token de sessão";
+"session token" = "token de sessão";
+"Show percentage in menu bar" = "Mostrar porcentagem na barra de menus";
+"Sign in with: %@" = "Faça login com: %@";
+"That doesn't look like a session token" = "Isso não parece um token de sessão";
+"This Mac's login" = "Login deste Mac";
+"Tip: add an alias, e.g. alias claude-work='%@'. Brink reads the token Claude Code keeps fresh while you use it." = "Dica: crie um alias, ex.: alias claude-trabalho='%@'. O Brink lê o token que o Claude Code mantém atualizado enquanto você usa.";
+"Up to %d accounts per provider" = "Até %d contas por provedor";
+"Updated %@" = "Atualizado %@";
+"Uses the account signed in to %@ on this Mac." = "Usa a conta logada no %@ neste Mac.";
+"Uses the account signed in to cursor-agent on this Mac." = "Usa a conta logada no cursor-agent neste Mac.";
