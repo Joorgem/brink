@@ -70,7 +70,7 @@ final class ClaudeProvider: UsageProvider {
                 // account left idle for a few hours ends up here. Keep the last
                 // numbers and say how to bring it back.
                 var stale = cache ?? snap
-                stale.error = L("Login expired. Use this account in Claude Code once and Brink picks it up.")
+                stale.error = L("Login expired")
                 return stale
             }
             var demo = Self.demoSnapshot(name: "Claude", systemImage: "asterisk",
