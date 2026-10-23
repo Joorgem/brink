@@ -147,18 +147,12 @@ struct ProviderSection: View {
             .padding(.horizontal, 4)
             .opacity(list.isEmpty ? 0.6 : 1)
 
-            if !list.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(Array(list.enumerated()), id: \.element.id) { index, account in
-                        if index > 0 {
-                            Divider().padding(.leading, 12)
-                        }
-                        AccountRow(account: account, snapshot: store.snapshot(for: account),
-                                   accounts: accounts, themeStore: themeStore, palette: palette)
-                    }
-                }
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(0.045)))
+            // One card per account.
+            ForEach(list) { account in
+                AccountRow(account: account, snapshot: store.snapshot(for: account),
+                           accounts: accounts, themeStore: themeStore, palette: palette)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.primary.opacity(0.045)))
             }
         }
     }
@@ -250,12 +244,6 @@ struct AccountRow: View {
                 }
             }
             Spacer(minLength: 4)
-            if isInMenuBar {
-                Image(systemName: "menubar.arrow.up.rectangle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                    .help(L("Shown in the menu bar"))
-            }
             Menu { actions } label: {
                 Image(systemName: "ellipsis")
             }
