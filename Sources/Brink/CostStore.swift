@@ -21,7 +21,7 @@ enum CostWindow: String {
     static func from(label: String) -> CostWindow? {
         switch label {
         case "Current session": return .session
-        case "All models":      return .weekly
+        case "Weekly limit":    return .weekly
         default:                return nil   // per-model scoped windows are a subset
         }
     }

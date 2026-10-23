@@ -45,9 +45,9 @@ struct ProviderSnapshot: Identifiable {
 
     var primary: UsageWindow? { windows.first }
 
-    /// The week-long window: Claude's "All models", Codex's "Weekly limit".
+    /// The week-long window, "Weekly limit" for both Claude and Codex.
     var weekly: UsageWindow? {
-        windows.first { $0.label == "All models" || $0.label == "Weekly limit" }
+        windows.first { $0.label == "Weekly limit" }
     }
 
     /// "Claude · Work" — used in notifications, where several accounts can share a provider.

@@ -190,7 +190,7 @@ final class ClaudeProvider: UsageProvider {
             case "session":
                 label = "Current session"
             case "weekly_all":
-                label = "All models"
+                label = "Weekly limit"
             case "weekly_scoped":
                 let scope = item["scope"] as? [String: Any]
                 let model = scope?["model"] as? [String: Any]
@@ -214,7 +214,7 @@ final class ClaudeProvider: UsageProvider {
         var windows: [UsageWindow] = []
         let ordered: [(String, String)] = [
             ("five_hour", "Current session"),
-            ("seven_day", "All models"),
+            ("seven_day", "Weekly limit"),
             ("seven_day_sonnet", "Sonnet"),
             ("seven_day_opus", "Opus"),
         ]
@@ -398,7 +398,7 @@ final class ClaudeProvider: UsageProvider {
             windows: [
                 UsageWindow(label: "Current session", usedPercent: 73,
                             resetsAt: Date().addingTimeInterval(51 * 60)),
-                UsageWindow(label: "All models", usedPercent: 7,
+                UsageWindow(label: "Weekly limit", usedPercent: 7,
                             resetsAt: Date().addingTimeInterval(36 * 3600)),
                 UsageWindow(label: "Fable", usedPercent: 4,
                             resetsAt: Date().addingTimeInterval(36 * 3600)),
