@@ -120,3 +120,9 @@
 "Both" = "Ambos";
 "Menu bar shows" = "La barra de menús muestra";
 "Settings" = "Ajustes";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "Se restablece %@ · en %@";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d d %d h";
+"%d d" = "%d d";

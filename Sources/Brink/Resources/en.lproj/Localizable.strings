@@ -132,3 +132,9 @@
 "Settings" = "Settings";
 
 "Login expired" = "Login expired";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "Resets %@ · in %@";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d d %d h";
+"%d d" = "%d d";

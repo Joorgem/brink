@@ -28,6 +28,28 @@ struct UsageWindow: Identifiable {
         fmt.dateFormat = "EEE HH:mm"
         return L("Resets %@", fmt.string(from: resetsAt))
     }
+
+    /// When and how long until: "Resets 16:30 · in 2 h 10 min" today,
+    /// "Resets Thu 14:00 · in 2 d 3 h" on another day. Used under the bars.
+    var resetDetail: String? {
+        guard let resetsAt else { return nil }
+        let seconds = resetsAt.timeIntervalSinceNow
+        if seconds <= 0 { return L("Resets soon") }
+        let fmt = DateFormatter()
+        if !L10n.override.isEmpty { fmt.locale = Locale(identifier: L10n.override) }
+        fmt.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(resetsAt) ? "Hm" : "EEEHm")
+        let minutes = Int(seconds / 60)
+        let remaining: String
+        if minutes < 60 {
+            remaining = L("%d min", max(1, minutes))
+        } else if minutes < 24 * 60 {
+            remaining = minutes % 60 > 0 ? L("%d h %d min", minutes / 60, minutes % 60) : L("%d h", minutes / 60)
+        } else {
+            let hours = minutes / 60
+            remaining = hours % 24 > 0 ? L("%d d %d h", hours / 24, hours % 24) : L("%d d", hours / 24)
+        }
+        return L("Resets %@ · in %@", fmt.string(from: resetsAt), remaining)
+    }
 }
 
 struct ProviderSnapshot: Identifiable {

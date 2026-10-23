@@ -120,3 +120,9 @@
 "Both" = "両方";
 "Menu bar shows" = "メニューバーの表示";
 "Settings" = "設定";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "リセット %@ · あと %@";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d日 %d時間";
+"%d d" = "%d日";

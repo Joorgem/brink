@@ -187,10 +187,18 @@ struct AccountRow: View {
                     UsageBar(fraction: primary.fraction,
                              color: UsageColor.color(for: snapshot, percent: primary.usedPercent),
                              height: 5)
-                    Text([L(primary.label), primary.resetText?.lowercasedFirst].compactMap { $0 }
-                            .joined(separator: " · "))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
+                    // No label: the big number is the current window; its reset
+                    // sits on the right, under the percentage.
+                    if let reset = primary.resetDetail {
+                        HStack {
+                            Spacer(minLength: 0)
+                            Text(reset)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        .help(L(primary.label))
+                    }
                 }
                 ForEach(snapshot.windows.dropFirst()) { window in
                     SecondaryUsageRow(window: window,
@@ -299,7 +307,7 @@ struct AccountRow: View {
     }
 }
 
-/// "All models   ▬▬░░░░  22%", with "Resets Mon 14:00" under it for the weekly window.
+/// "Weekly limit   ▬▬░░░░  22%", with "Resets Mon 14:00 · in 2 d 3 h" under it on the right for the weekly window.
 struct SecondaryUsageRow: View {
     let window: UsageWindow
     let color: Color
@@ -308,10 +316,14 @@ struct SecondaryUsageRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             bar
-            if showsReset, let reset = window.resetText {
-                Text(reset)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+            if showsReset, let reset = window.resetDetail {
+                HStack {
+                    Spacer(minLength: 0)
+                    Text(reset)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
             }
         }
     }

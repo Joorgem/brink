@@ -120,3 +120,9 @@
 "Both" = "两者";
 "Menu bar shows" = "菜单栏显示";
 "Settings" = "设置";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "重置 %@ · 还剩 %@";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d 天 %d 小时";
+"%d d" = "%d 天";

@@ -131,3 +131,9 @@
 "Both" = "İkisi de";
 "Menu bar shows" = "Menü çubuğunda göster";
 "Settings" = "Ayarlar";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "Sıfırlanma %@ · %@ sonra";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d g %d sa";
+"%d d" = "%d g";

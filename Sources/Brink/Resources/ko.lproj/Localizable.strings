@@ -120,3 +120,9 @@
 "Both" = "둘 다";
 "Menu bar shows" = "메뉴 막대 표시";
 "Settings" = "설정";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "재설정 %@ · %@ 남음";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d일 %d시간";
+"%d d" = "%d일";

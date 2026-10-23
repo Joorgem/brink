@@ -121,3 +121,9 @@
 "Settings" = "Ajustes";
 
 "Login expired" = "Login expirado";
+
+/* Reset detail under the bars */
+"Resets %@ · in %@" = "Redefine %@ · em %@";
+"%d h %d min" = "%d h %d min";
+"%d d %d h" = "%d d %d h";
+"%d d" = "%d d";
