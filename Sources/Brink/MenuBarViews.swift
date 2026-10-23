@@ -17,10 +17,8 @@ struct PopoverView: View {
     @ObservedObject var accounts: AccountStore
     @ObservedObject var themeStore: ThemeStore
     @ViewState private var adding: ProviderKind?
-    @ViewState private var contentHeight: CGFloat = 0
 
     static let width: CGFloat = 320
-    private static let maxListHeight: CGFloat = 560
     let palette = Palette.popover
 
     var body: some View {
@@ -90,29 +88,17 @@ struct PopoverView: View {
     // MARK: List
 
     private var accountList: some View {
-        // Every provider gets a header with its "+", even with no accounts yet,
-        // so that's the one place to add an account.
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(accounts.visibleKinds) { kind in
-                    ProviderSection(kind: kind, list: accounts.accounts(for: kind), store: store,
-                                    accounts: accounts, themeStore: themeStore, palette: palette) { adding = kind }
-                }
+        // No scrolling: the popover grows to fit every account.
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(accounts.visibleKinds) { kind in
+                ProviderSection(kind: kind, list: accounts.accounts(for: kind), store: store,
+                                accounts: accounts, themeStore: themeStore, palette: palette) { adding = kind }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 14)
-            .background(GeometryReader { geo in
-                Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
-            })
         }
-        .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
-        .frame(height: min(max(contentHeight, 60), Self.maxListHeight))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .fixedSize(horizontal: false, vertical: true)
     }
-}
-
-private struct ContentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 // MARK: - Provider section
