@@ -7,10 +7,10 @@ import CryptoKit
 /// the same request Claude Code itself makes for `/usage`.
 ///
 /// Design notes:
-/// - Brink never refreshes tokens itself. Doing so with Claude Code's
-///   refresh token could rotate it and log the user out of Claude Code.
-///   When the access token expires, we simply re-read Claude Code's store
-///   (Claude Code keeps it fresh whenever it runs).
+/// - While Claude Code runs it keeps the token fresh, and Brink just re-reads
+///   its store. Once a login has expired (the account sat idle), Brink renews
+///   it itself and writes the new pair back to Claude Code's store; see
+///   `ClaudeTokenRefresher` for how that avoids logging the account out.
 /// - Only the short-lived access token (+ expiry) is cached locally, so the
 ///   Keychain prompt appears once, not on every refresh cycle.
 /// - The usage endpoint itself is shared with Claude Code's own `/usage`
@@ -64,7 +64,20 @@ final class ClaudeProvider: UsageProvider {
                                     systemImage: "asterisk",
                                     windows: [], error: nil,
                                     accent: UsageColor.claudeOrange)
-        guard let creds = loadCredentials() else {
+        var loaded = loadCredentials()
+        if loaded == nil, let expired = expiredLogin, !renewing,
+           renewFailedAt.map({ Date().timeIntervalSince($0) > Self.keychainRetryInterval }) ?? true {
+            renewing = true
+            renewFailedAt = Date()
+            if let data = await ClaudeTokenRefresher.renew(store: expired, pendingURL: pendingURL),
+               let fresh = Self.parseCredentialsJSON(data), !fresh.isExpired {
+                saveOwnCopy(fresh)
+                loaded = fresh
+                renewFailedAt = nil
+            }
+            renewing = false
+        }
+        guard let creds = loaded else {
             if loginExpired {
                 // Claude Code only refreshes a login while it's being used, so an
                 // account left idle for a few hours ends up here. Keep the last
@@ -257,6 +270,7 @@ final class ClaudeProvider: UsageProvider {
     func loadCredentials() -> Credentials? {
         if let cached = memoryCache, !cached.isExpired { return cached }
         loginExpired = false
+        expiredLogin = nil
 
         if let data = try? Data(contentsOf: ownStoreURL),
            let creds = Self.parseCredentialsJSON(data), !creds.isExpired {
@@ -274,6 +288,7 @@ final class ClaudeProvider: UsageProvider {
                 return creds
             }
             loginExpired = true
+            expiredLogin = .file(claudeFile)
         }
 
         // Don't hammer the Keychain (and the user with prompts) if it keeps failing.
@@ -291,6 +306,7 @@ final class ClaudeProvider: UsageProvider {
                 // The item is there and readable, only stale: no prompt to fear,
                 // so look again on the next refresh instead of in 10 minutes.
                 loginExpired = true
+                expiredLogin = .keychain(service: service)
                 lastKeychainAttempt = nil
             }
         }
@@ -318,6 +334,13 @@ final class ClaudeProvider: UsageProvider {
     private var lastKeychainAttempt: Date?
     /// Set by `loadCredentials()` when a login was found but its token has expired.
     private var loginExpired = false
+    /// Where that expired login lives, for `ClaudeTokenRefresher`.
+    private var expiredLogin: ClaudeTokenRefresher.Store?
+    private var renewing = false
+    /// After a failed renewal, wait as long as for the Keychain before trying again.
+    private var renewFailedAt: Date?
+    /// Renewed credentials waiting for their store write; see `ClaudeTokenRefresher`.
+    private var pendingURL: URL { ownStoreURL.appendingPathExtension("pending") }
     private static let keychainRetryInterval: TimeInterval = 10 * 60
 
     static var defaultOwnStoreURL: URL {

@@ -233,7 +233,7 @@ final class AccountStore: ObservableObject {
         guard let i = accounts.firstIndex(where: { $0.id == id }) else { return }
         let account = accounts.remove(at: i)
         // Drop whatever Brink cached for it. The CLI's own login is never touched.
-        for suffix in ["credentials.json", "cursor-session"] {
+        for suffix in ["credentials.json", "credentials.json.pending", "cursor-session"] {
             try? FileManager.default.removeItem(at: account.storageURL(suffix))
         }
         save()
@@ -262,11 +262,25 @@ enum AccountFiles {
         return p
     }
 
-    static func writePrivate(_ data: Data, to url: URL) {
+    /// Writes `data` to a temp file created 0600, then renames it over `url`,
+    /// so the contents are never readable by others, not even briefly.
+    /// Returns whether `url` now holds exactly `data`.
+    @discardableResult
+    static func writePrivate(_ data: Data, to url: URL) -> Bool {
         let fm = FileManager.default
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
                                 attributes: [.posixPermissions: 0o700])
-        try? data.write(to: url, options: .atomic)
-        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let temp = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+        guard fd >= 0 else { return false }
+        let written = data.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        let synced = fsync(fd) == 0
+        close(fd)
+        guard written == data.count, synced, rename(temp.path, url.path) == 0 else {
+            try? fm.removeItem(at: temp)
+            return false
+        }
+        return (try? Data(contentsOf: url)) == data
     }
 }
