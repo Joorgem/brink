@@ -102,17 +102,19 @@ struct CodexProvider: UsageProvider {
         return windows
     }
 
+    /// The usage endpoint says `reset_at` / `reset_after_seconds`; the CLI's
+    /// own session logs say `resets_at` / `resets_in_seconds`. Accept both.
     static func resetDate(_ dict: [String: Any]) -> Date? {
-        if let s = ClaudeProvider.number(dict["resets_in_seconds"]) {
-            return Date().addingTimeInterval(s)
+        for key in ["reset_after_seconds", "resets_in_seconds"] {
+            if let s = ClaudeProvider.number(dict[key]) { return Date().addingTimeInterval(s) }
         }
-        if let iso = ClaudeProvider.isoDate(dict["resets_at"]) {
-            return iso
-        }
-        if let epoch = ClaudeProvider.number(dict["resets_at"]) {
-            // Could be seconds or milliseconds since epoch.
-            let seconds = epoch > 10_000_000_000 ? epoch / 1000.0 : epoch
-            return Date(timeIntervalSince1970: seconds)
+        for key in ["reset_at", "resets_at"] {
+            if let iso = ClaudeProvider.isoDate(dict[key]) { return iso }
+            if let epoch = ClaudeProvider.number(dict[key]) {
+                // Could be seconds or milliseconds since epoch.
+                let seconds = epoch > 10_000_000_000 ? epoch / 1000.0 : epoch
+                return Date(timeIntervalSince1970: seconds)
+            }
         }
         return nil
     }
