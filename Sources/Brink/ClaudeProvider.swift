@@ -249,8 +249,8 @@ final class ClaudeProvider: UsageProvider {
     ///  1) In-memory cache (no I/O while the app is running)
     ///  2) Brink's own cache of the access token (written after a successful read)
     ///  3) ~/.claude/.credentials.json (file store used by Claude Code on some setups)
-    ///  4) Keychain item "Claude Code-credentials" — this is what triggers the
-    ///     macOS prompt. Clicking "Always Allow" makes it silent afterwards.
+    ///  4) Keychain item "Claude Code-credentials", read through `security`
+    ///     (see `keychainDataViaSecurityTool`), so no password prompt.
     /// Expired tokens are discarded so Claude Code's fresher copy is picked up.
     /// For an account in its own folder, steps 3–4 use that folder's
     /// `.credentials.json` and its Keychain item instead.
@@ -282,7 +282,7 @@ final class ClaudeProvider: UsageProvider {
         }
         lastKeychainAttempt = Date()
         for service in keychainServices {
-            if let data = Self.keychainData(service: service),
+            if let data = Self.keychainDataViaSecurityTool(service: service),
                let creds = Self.parseCredentialsJSON(data) {
                 if !creds.isExpired {
                     saveOwnCopy(creds)
@@ -365,6 +365,29 @@ final class ClaudeProvider: UsageProvider {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess else { return nil }
         return item as? Data
+    }
+
+    /// Claude Code writes its Keychain item with Apple's `security` tool, so
+    /// that tool is on the item's access list. Reading through it doesn't ask
+    /// for the Mac password, and the access survives Brink being rebuilt and
+    /// Claude Code rewriting the item on every token refresh, both of which
+    /// drop a direct `SecItemCopyMatching` grant. The secret arrives on stdout,
+    /// never in argv.
+    static func keychainDataViaSecurityTool(service: String) -> Data? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", service, "-w"]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        // `-w` prints the secret plus a trailing newline.
+        var trimmed = data
+        while let last = trimmed.last, last == 0x0A || last == 0x0D { trimmed.removeLast() }
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: Demo fallback
