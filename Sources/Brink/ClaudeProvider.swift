@@ -65,6 +65,14 @@ final class ClaudeProvider: UsageProvider {
                                     windows: [], error: nil,
                                     accent: UsageColor.claudeOrange)
         guard let creds = loadCredentials() else {
+            if loginExpired {
+                // Claude Code only refreshes a login while it's being used, so an
+                // account left idle for a few hours ends up here. Keep the last
+                // numbers and say how to bring it back.
+                var stale = cache ?? snap
+                stale.error = L("Login expired. Use this account in Claude Code once and Brink picks it up.")
+                return stale
+            }
             var demo = Self.demoSnapshot(name: "Claude", systemImage: "asterisk",
                                          note: L("Claude Code credentials not found"))
             demo.accent = UsageColor.claudeOrange
@@ -248,6 +256,7 @@ final class ClaudeProvider: UsageProvider {
     /// `.credentials.json` and its Keychain item instead.
     func loadCredentials() -> Credentials? {
         if let cached = memoryCache, !cached.isExpired { return cached }
+        loginExpired = false
 
         if let data = try? Data(contentsOf: ownStoreURL),
            let creds = Self.parseCredentialsJSON(data), !creds.isExpired {
@@ -259,9 +268,12 @@ final class ClaudeProvider: UsageProvider {
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
         let claudeFile = claudeDir.appendingPathComponent(".credentials.json")
         if let data = try? Data(contentsOf: claudeFile),
-           let creds = Self.parseCredentialsJSON(data), !creds.isExpired {
-            saveOwnCopy(creds)
-            return creds
+           let creds = Self.parseCredentialsJSON(data) {
+            if !creds.isExpired {
+                saveOwnCopy(creds)
+                return creds
+            }
+            loginExpired = true
         }
 
         // Don't hammer the Keychain (and the user with prompts) if it keeps failing.
@@ -271,9 +283,15 @@ final class ClaudeProvider: UsageProvider {
         lastKeychainAttempt = Date()
         for service in keychainServices {
             if let data = Self.keychainData(service: service),
-               let creds = Self.parseCredentialsJSON(data), !creds.isExpired {
-                saveOwnCopy(creds)
-                return creds
+               let creds = Self.parseCredentialsJSON(data) {
+                if !creds.isExpired {
+                    saveOwnCopy(creds)
+                    return creds
+                }
+                // The item is there and readable, only stale: no prompt to fear,
+                // so look again on the next refresh instead of in 10 minutes.
+                loginExpired = true
+                lastKeychainAttempt = nil
             }
         }
         return nil
@@ -298,6 +316,8 @@ final class ClaudeProvider: UsageProvider {
 
     private var memoryCache: Credentials?
     private var lastKeychainAttempt: Date?
+    /// Set by `loadCredentials()` when a login was found but its token has expired.
+    private var loginExpired = false
     private static let keychainRetryInterval: TimeInterval = 10 * 60
 
     static var defaultOwnStoreURL: URL {
