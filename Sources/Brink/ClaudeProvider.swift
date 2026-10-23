@@ -119,19 +119,13 @@ final class ClaudeProvider: UsageProvider {
         }
     }
 
-    /// While rate-limited, prefer the last good snapshot (still shows real
-    /// numbers) over a blank/error ring; falls back to an error if we never
-    /// had one yet.
+    /// While rate-limited, keep showing the last good snapshot without a
+    /// warning; the back-off retries on its own. Before any data, the card
+    /// just says it's loading.
     private func rateLimitedSnapshot(retryAt: Date) -> ProviderSnapshot {
-        let waitMin = max(1, Int(retryAt.timeIntervalSinceNow / 60))
-        if var snap = cache {
-            snap.error = L("Rate limited — showing cached usage, retrying in ~%d min", waitMin)
-            return snap
-        }
-        var snap = ProviderSnapshot(id: "claude", name: "Claude", systemImage: "asterisk",
-                                    windows: [], error: nil, accent: UsageColor.claudeOrange)
-        snap.error = L("Rate limited (429) — retrying in ~%d min", waitMin)
-        return snap
+        if let snap = cache { return snap }
+        return ProviderSnapshot(id: "claude", name: "Claude", systemImage: "asterisk",
+                                windows: [], error: nil, accent: UsageColor.claudeOrange)
     }
 
     /// `Retry-After` is valid as either delta-seconds ("120") or an HTTP-date
