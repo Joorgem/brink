@@ -1,23 +1,37 @@
 import Foundation
 import Security
+import CryptoKit
 
 /// Reads Claude Code's OAuth access token (macOS Keychain or
 /// ~/.claude/.credentials.json) and queries Anthropic's usage endpoint —
 /// the same request Claude Code itself makes for `/usage`.
 ///
 /// Design notes:
-/// - Brink never refreshes tokens itself. Doing so with Claude Code's
-///   refresh token could rotate it and log the user out of Claude Code.
-///   When the access token expires, we simply re-read Claude Code's store
-///   (Claude Code keeps it fresh whenever it runs).
+/// - While Claude Code runs it keeps the token fresh, and Brink just re-reads
+///   its store. Once a login has expired (the account sat idle), Brink renews
+///   it itself and writes the new pair back to Claude Code's store; see
+///   `ClaudeTokenRefresher` for how that avoids logging the account out.
 /// - Only the short-lived access token (+ expiry) is cached locally, so the
 ///   Keychain prompt appears once, not on every refresh cycle.
 /// - The usage endpoint itself is shared with Claude Code's own `/usage`
 ///   command, so it rate-limits fairly easily. On a 429, `fetch()` backs off
 ///   for the `Retry-After` window and serves the last good snapshot instead
 ///   of hammering the endpoint and blanking the ring.
-struct ClaudeProvider: UsageProvider {
+/// - One instance per account. Extra accounts are Claude Code logins kept in
+///   their own folder (`CLAUDE_CONFIG_DIR=<dir> claude`); all caches below are
+///   per instance so accounts never see each other's tokens.
+final class ClaudeProvider: UsageProvider {
     let id = "claude"
+
+    /// nil = Claude Code's default login (~/.claude, Keychain "Claude Code-credentials").
+    private let configDir: String?
+    /// Brink's own copy of this account's short-lived access token.
+    private let ownStoreURL: URL
+
+    init(configDir: String? = nil, ownStoreURL: URL? = nil) {
+        self.configDir = configDir
+        self.ownStoreURL = ownStoreURL ?? Self.defaultOwnStoreURL
+    }
 
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
@@ -38,19 +52,74 @@ struct ClaudeProvider: UsageProvider {
     // we stop hitting the network until Anthropic's own `Retry-After` window
     // has passed, and meanwhile keep showing the last good numbers instead of
     // blanking the ring out.
-    private static var cache: ProviderSnapshot?
-    private static var cooldownUntil: Date?
+    private var cache: ProviderSnapshot? {
+        didSet { if let cache { saveUsage(cache) } }
+    }
+    private var loadedSavedUsage = false
+
+    /// The last good numbers, kept on disk (numbers and reset times only) so a
+    /// restart during a rate limit shows them instead of an endless "Loading".
+    private var usageURL: URL {
+        ownStoreURL.deletingLastPathComponent().appendingPathComponent(
+            ownStoreURL.lastPathComponent.replacingOccurrences(of: "credentials.json", with: "usage.json"))
+    }
+
+    private struct SavedUsage: Codable {
+        var windows: [UsageWindow]
+        var updatedAt: Date?
+    }
+
+    private func saveUsage(_ snap: ProviderSnapshot) {
+        guard let data = try? JSONEncoder().encode(SavedUsage(windows: snap.windows, updatedAt: snap.updatedAt))
+        else { return }
+        AccountFiles.writePrivate(data, to: usageURL)
+    }
+
+    private func loadSavedUsage() {
+        guard !loadedSavedUsage else { return }
+        loadedSavedUsage = true
+        guard cache == nil,
+              let data = try? Data(contentsOf: usageURL),
+              let saved = try? JSONDecoder().decode(SavedUsage.self, from: data),
+              !saved.windows.isEmpty else { return }
+        cache = ProviderSnapshot(id: id, name: "Claude", systemImage: "asterisk",
+                                 windows: saved.windows, error: nil,
+                                 accent: UsageColor.claudeOrange, updatedAt: saved.updatedAt)
+    }
+    private var cooldownUntil: Date?
 
     func fetch() async -> ProviderSnapshot {
-        if let until = Self.cooldownUntil, Date() < until {
-            return Self.rateLimitedSnapshot(retryAt: until)
+        loadSavedUsage()
+        if let until = cooldownUntil, Date() < until {
+            return rateLimitedSnapshot(retryAt: until)
         }
 
         var snap = ProviderSnapshot(id: id, name: "Claude",
                                     systemImage: "asterisk",
                                     windows: [], error: nil,
                                     accent: UsageColor.claudeOrange)
-        guard let creds = Self.loadCredentials() else {
+        var loaded = loadCredentials()
+        if loaded == nil, let expired = expiredLogin, !renewing,
+           renewFailedAt.map({ Date().timeIntervalSince($0) > Self.keychainRetryInterval }) ?? true {
+            renewing = true
+            renewFailedAt = Date()
+            if let data = await ClaudeTokenRefresher.renew(store: expired, pendingURL: pendingURL),
+               let fresh = Self.parseCredentialsJSON(data), !fresh.isExpired {
+                saveOwnCopy(fresh)
+                loaded = fresh
+                renewFailedAt = nil
+            }
+            renewing = false
+        }
+        guard let creds = loaded else {
+            if loginExpired {
+                // Claude Code only refreshes a login while it's being used, so an
+                // account left idle for a few hours ends up here. Keep the last
+                // numbers and say how to bring it back.
+                var stale = cache ?? snap
+                stale.error = L("Login expired")
+                return stale
+            }
             var demo = Self.demoSnapshot(name: "Claude", systemImage: "asterisk",
                                          note: L("Claude Code credentials not found"))
             demo.accent = UsageColor.claudeOrange
@@ -63,8 +132,8 @@ struct ClaudeProvider: UsageProvider {
             if status == 401 {
                 // Claude Code rotated its token: drop our cache, re-read its store
                 // (Keychain / file) and retry once right away.
-                Self.clearOwnCopy()
-                if let fresh = Self.loadCredentials(), fresh.accessToken != creds.accessToken {
+                clearOwnCopy()
+                if let fresh = loadCredentials(), fresh.accessToken != creds.accessToken {
                     activeToken = fresh.accessToken
                     (data, status, response) = try await Self.requestUsage(token: activeToken)
                 }
@@ -86,8 +155,8 @@ struct ClaudeProvider: UsageProvider {
             if status == 429 {
                 let retrySeconds = max(30, Self.retryAfterSeconds(response) ?? 60)
                 let until = Date().addingTimeInterval(retrySeconds)
-                Self.cooldownUntil = until
-                return Self.rateLimitedSnapshot(retryAt: until)
+                cooldownUntil = until
+                return rateLimitedSnapshot(retryAt: until)
             }
             guard status == 200 else {
                 snap.error = L("HTTP %d", status)
@@ -96,8 +165,8 @@ struct ClaudeProvider: UsageProvider {
             snap.windows = Self.parseUsage(data)
             snap.updatedAt = Date()
             if snap.windows.isEmpty { snap.error = L("No usage data in response") }
-            Self.cooldownUntil = nil
-            Self.cache = snap
+            cooldownUntil = nil
+            cache = snap
             return snap
         } catch {
             snap.error = error.localizedDescription
@@ -105,19 +174,13 @@ struct ClaudeProvider: UsageProvider {
         }
     }
 
-    /// While rate-limited, prefer the last good snapshot (still shows real
-    /// numbers) over a blank/error ring; falls back to an error if we never
-    /// had one yet.
-    private static func rateLimitedSnapshot(retryAt: Date) -> ProviderSnapshot {
-        let waitMin = max(1, Int(retryAt.timeIntervalSinceNow / 60))
-        if var snap = cache {
-            snap.error = L("Rate limited — showing cached usage, retrying in ~%d min", waitMin)
-            return snap
-        }
-        var snap = ProviderSnapshot(id: "claude", name: "Claude", systemImage: "asterisk",
-                                    windows: [], error: nil, accent: UsageColor.claudeOrange)
-        snap.error = L("Rate limited (429) — retrying in ~%d min", waitMin)
-        return snap
+    /// While rate-limited, keep showing the last good snapshot without a
+    /// warning; the back-off retries on its own. Before any data, the card
+    /// just says it's loading.
+    private func rateLimitedSnapshot(retryAt: Date) -> ProviderSnapshot {
+        if let snap = cache { return snap }
+        return ProviderSnapshot(id: "claude", name: "Claude", systemImage: "asterisk",
+                                windows: [], error: nil, accent: UsageColor.claudeOrange)
     }
 
     /// `Retry-After` is valid as either delta-seconds ("120") or an HTTP-date
@@ -174,7 +237,7 @@ struct ClaudeProvider: UsageProvider {
             case "session":
                 label = "Current session"
             case "weekly_all":
-                label = "All models"
+                label = "Weekly limit"
             case "weekly_scoped":
                 let scope = item["scope"] as? [String: Any]
                 let model = scope?["model"] as? [String: Any]
@@ -198,7 +261,7 @@ struct ClaudeProvider: UsageProvider {
         var windows: [UsageWindow] = []
         let ordered: [(String, String)] = [
             ("five_hour", "Current session"),
-            ("seven_day", "All models"),
+            ("seven_day", "Weekly limit"),
             ("seven_day_sonnet", "Sonnet"),
             ("seven_day_opus", "Opus"),
         ]
@@ -233,65 +296,102 @@ struct ClaudeProvider: UsageProvider {
     ///  1) In-memory cache (no I/O while the app is running)
     ///  2) Brink's own cache of the access token (written after a successful read)
     ///  3) ~/.claude/.credentials.json (file store used by Claude Code on some setups)
-    ///  4) Keychain item "Claude Code-credentials" — this is what triggers the
-    ///     macOS prompt. Clicking "Always Allow" makes it silent afterwards.
+    ///  4) Keychain item "Claude Code-credentials", read through `security`
+    ///     (see `keychainDataViaSecurityTool`), so no password prompt.
     /// Expired tokens are discarded so Claude Code's fresher copy is picked up.
-    static func loadCredentials() -> Credentials? {
+    /// For an account in its own folder, steps 3–4 use that folder's
+    /// `.credentials.json` and its Keychain item instead.
+    func loadCredentials() -> Credentials? {
         if let cached = memoryCache, !cached.isExpired { return cached }
+        loginExpired = false
+        expiredLogin = nil
 
         if let data = try? Data(contentsOf: ownStoreURL),
-           let creds = parseCredentialsJSON(data), !creds.isExpired {
+           let creds = Self.parseCredentialsJSON(data), !creds.isExpired {
             memoryCache = creds
             return creds
         }
 
-        let claudeFile = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/.credentials.json")
+        let claudeDir = configDir.map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        let claudeFile = claudeDir.appendingPathComponent(".credentials.json")
         if let data = try? Data(contentsOf: claudeFile),
-           let creds = parseCredentialsJSON(data), !creds.isExpired {
-            saveOwnCopy(creds)
-            return creds
+           let creds = Self.parseCredentialsJSON(data) {
+            if !creds.isExpired {
+                saveOwnCopy(creds)
+                return creds
+            }
+            loginExpired = true
+            expiredLogin = .file(claudeFile)
         }
 
         // Don't hammer the Keychain (and the user with prompts) if it keeps failing.
-        if let last = lastKeychainAttempt, Date().timeIntervalSince(last) < keychainRetryInterval {
+        if let last = lastKeychainAttempt, Date().timeIntervalSince(last) < Self.keychainRetryInterval {
             return nil
         }
         lastKeychainAttempt = Date()
-        if let data = keychainData(service: "Claude Code-credentials"),
-           let creds = parseCredentialsJSON(data), !creds.isExpired {
-            saveOwnCopy(creds)
-            return creds
+        for service in keychainServices {
+            if let data = Self.keychainDataViaSecurityTool(service: service),
+               let creds = Self.parseCredentialsJSON(data) {
+                if !creds.isExpired {
+                    saveOwnCopy(creds)
+                    return creds
+                }
+                // The item is there and readable, only stale: no prompt to fear,
+                // so look again on the next refresh instead of in 10 minutes.
+                loginExpired = true
+                expiredLogin = .keychain(service: service)
+                lastKeychainAttempt = nil
+            }
         }
         return nil
+    }
+
+    /// Claude Code names its Keychain item "Claude Code-credentials" for the
+    /// default folder, and appends "-<first 8 hex of sha256(CLAUDE_CONFIG_DIR)>"
+    /// when the variable is set. The path is hashed exactly as typed, so try it
+    /// with and without a trailing slash.
+    private var keychainServices: [String] {
+        guard let configDir else { return ["Claude Code-credentials"] }
+        let trimmed = AccountFiles.normalize(configDir)
+        return [trimmed, trimmed + "/"].map {
+            let digest = SHA256.hash(data: Data($0.utf8))
+            let hex = digest.map { String(format: "%02x", $0) }.joined()
+            return "Claude Code-credentials-\(hex.prefix(8))"
+        }
     }
 
     // MARK: Own credential cache (~/Library/Application Support/Brink/credentials.json)
     // Holds ONLY the short-lived access token and its expiry — never the refresh token.
 
-    private static var memoryCache: Credentials?
-    private static var lastKeychainAttempt: Date?
+    private var memoryCache: Credentials?
+    private var lastKeychainAttempt: Date?
+    /// Set by `loadCredentials()` when a login was found but its token has expired.
+    private var loginExpired = false
+    /// Where that expired login lives, for `ClaudeTokenRefresher`.
+    private var expiredLogin: ClaudeTokenRefresher.Store?
+    private var renewing = false
+    /// After a failed renewal, wait as long as for the Keychain before trying again.
+    private var renewFailedAt: Date?
+    /// Renewed credentials waiting for their store write; see `ClaudeTokenRefresher`.
+    private var pendingURL: URL { ownStoreURL.appendingPathExtension("pending") }
     private static let keychainRetryInterval: TimeInterval = 10 * 60
 
-    static var ownStoreURL: URL {
+    static var defaultOwnStoreURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("Brink", isDirectory: true)
             .appendingPathComponent("credentials.json")
     }
 
-    static func saveOwnCopy(_ creds: Credentials) {
+    func saveOwnCopy(_ creds: Credentials) {
         memoryCache = creds
         var oauth: [String: Any] = ["accessToken": creds.accessToken]
         if let e = creds.expiresAt { oauth["expiresAt"] = Int(e.timeIntervalSince1970 * 1000) }
         guard let data = try? JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth]) else { return }
-        let dir = ownStoreURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
-                                                 attributes: [.posixPermissions: 0o700])
-        try? data.write(to: ownStoreURL, options: .atomic)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: ownStoreURL.path)
+        AccountFiles.writePrivate(data, to: ownStoreURL)
     }
 
-    static func clearOwnCopy() {
+    func clearOwnCopy() {
         memoryCache = nil
         lastKeychainAttempt = nil
         try? FileManager.default.removeItem(at: ownStoreURL)
@@ -324,6 +424,29 @@ struct ClaudeProvider: UsageProvider {
         return item as? Data
     }
 
+    /// Claude Code writes its Keychain item with Apple's `security` tool, so
+    /// that tool is on the item's access list. Reading through it doesn't ask
+    /// for the Mac password, and the access survives Brink being rebuilt and
+    /// Claude Code rewriting the item on every token refresh, both of which
+    /// drop a direct `SecItemCopyMatching` grant. The secret arrives on stdout,
+    /// never in argv.
+    static func keychainDataViaSecurityTool(service: String) -> Data? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", service, "-w"]
+        let out = Pipe()
+        process.standardOutput = out
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        // `-w` prints the secret plus a trailing newline.
+        var trimmed = data
+        while let last = trimmed.last, last == 0x0A || last == 0x0D { trimmed.removeLast() }
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     // MARK: Demo fallback
 
     static func demoSnapshot(name: String, systemImage: String, note: String) -> ProviderSnapshot {
@@ -332,7 +455,7 @@ struct ClaudeProvider: UsageProvider {
             windows: [
                 UsageWindow(label: "Current session", usedPercent: 73,
                             resetsAt: Date().addingTimeInterval(51 * 60)),
-                UsageWindow(label: "All models", usedPercent: 7,
+                UsageWindow(label: "Weekly limit", usedPercent: 7,
                             resetsAt: Date().addingTimeInterval(36 * 3600)),
                 UsageWindow(label: "Fable", usedPercent: 4,
                             resetsAt: Date().addingTimeInterval(36 * 3600)),

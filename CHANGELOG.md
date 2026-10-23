@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [Unreleased]
 
+### Changed
+- **macOS: Brink now lives in the menu bar.** The edge panel is replaced by a menu bar icon (with the usage of the account you pick next to it) and a popover listing every account's limits. The popover is built when opened and released when closed, and the always-on global mouse monitor is gone, so the idle app holds no windows or views.
+
+### Added
+- **Multiple accounts per provider** (up to 5 each). Extra Claude Code and Codex accounts are separate login folders (`CLAUDE_CONFIG_DIR` / `CODEX_HOME`), so several stay signed in at once; extra Cursor accounts use a pasted `WorkosCursorSessionToken`. Add, rename and remove accounts from the popover; the list updates immediately.
+
 ## [0.6.0] - 2026-08-31
 
 ### Added

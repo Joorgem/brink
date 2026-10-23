@@ -70,8 +70,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func observe(_ snapshots: [ProviderSnapshot]) {
         guard isEnabled else { return }
         let now = Date()
-        let hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenProviders") ?? [])
-        for snap in snapshots where !snap.isDemo && !hidden.contains(snap.id) {
+        for snap in snapshots where !snap.isDemo {
             for window in snap.windows {
                 let key = "\(snap.id)|\(window.label)"
                 let isFull = window.usedPercent >= 99.5
@@ -100,13 +99,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     private func notifyFull(_ snap: ProviderSnapshot, _ w: UsageWindow, key: String) {
         let when = w.resetText.map { " " + $0.lowercasedFirst + "." } ?? ""
         post(id: "full|\(key)",
-             title: L("%@ — %@ limit reached", snap.name, L(w.label)),
+             title: L("%@ — %@ limit reached", snap.displayName, L(w.label)),
              body: L("You've used 100 %%.%@ I'll let you know when it resets.", when))
     }
 
     private func notifyReset(_ snap: ProviderSnapshot, _ w: UsageWindow) {
         post(id: "reset|\(snap.id)|\(w.label)",
-             title: L("%@ — %@ reset", snap.name, L(w.label)),
+             title: L("%@ — %@ reset", snap.displayName, L(w.label)),
              body: L("Your full limit is available again."))
     }
 
@@ -115,7 +114,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let delay = resetsAt.timeIntervalSinceNow + 20   // small grace for clock skew
         guard delay > 1 else { return }
         let content = UNMutableNotificationContent()
-        content.title = L("%@ — %@ reset", snap.name, L(w.label))
+        content.title = L("%@ — %@ reset", snap.displayName, L(w.label))
         content.body = L("Your full limit is available again.")
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)

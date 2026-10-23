@@ -1,21 +1,23 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var accounts: AccountStore!
     private var store: UsageStore!
     private var themeStore: ThemeStore!
-    private var controller: PanelController!
+    private var menuBar: MenuBarController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        store = UsageStore(providers: [ClaudeProvider(), CodexProvider(), CursorProvider()])
-        themeStore = ThemeStore()
+        accounts = AccountStore()
+        store = UsageStore(accounts: accounts)
+        themeStore = ThemeStore(defaultMenuBarAccount: accounts.accounts.first?.id.uuidString ?? "")
         Notifier.shared.requestAuthorizationIfNeeded()
-        controller = PanelController(store: store, themeStore: themeStore)
-        store.startAutoRefresh(interval: 120)
+        menuBar = MenuBarController(store: store, accounts: accounts, themeStore: themeStore)
+        store.startAutoRefresh(interval: 300)
     }
 }
 
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory) // no Dock icon, no menu bar
+app.setActivationPolicy(.accessory) // no Dock icon: Brink lives in the menu bar
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

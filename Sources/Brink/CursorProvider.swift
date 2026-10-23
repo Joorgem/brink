@@ -16,8 +16,13 @@ import Foundation
 ///   field is probed defensively and a missing shape degrades to a friendly
 ///   error rather than crashing.
 /// - The server returns pre-computed percentages, so Brink displays them as-is.
+/// - cursor-agent keeps a single login, so extra accounts use a pasted
+///   `WorkosCursorSessionToken` cookie (from cursor.com) stored in Brink's own
+///   0600 file — `sessionFile`. Those never touch the Keychain.
 struct CursorProvider: UsageProvider {
     let id = "cursor"
+    /// nil = cursor-agent's login (Keychain + ~/.cursor/cli-config.json).
+    var sessionFile: URL? = nil
 
     private static let usageURL = URL(string: "https://cursor.com/api/usage-summary")!
     private static let keychainService = "cursor-access-token"
@@ -27,6 +32,21 @@ struct CursorProvider: UsageProvider {
         var snap = ProviderSnapshot(id: id, name: "Cursor",
                                     systemImage: "cursorarrow",
                                     windows: [], error: nil)
+        if let sessionFile {
+            guard let session = Self.loadSession(sessionFile) else {
+                snap.error = L("Session token missing — remove this account and add it again")
+                return snap
+            }
+            do {
+                let (data, status) = try await Self.requestUsage(token: session.token, userId: session.userId)
+                return Self.finish(snap, data: data, status: status,
+                                   unauthorized: L("Session expired — copy a fresh WorkosCursorSessionToken from cursor.com"))
+            } catch {
+                snap.error = error.localizedDescription
+                return snap
+            }
+        }
+
         guard let token = Self.loadToken(), let userId = Self.loadUserId() else {
             return ClaudeProvider.demoSnapshot(
                 name: "Cursor", systemImage: "cursorarrow",
@@ -42,22 +62,50 @@ struct CursorProvider: UsageProvider {
                     (data, status) = try await Self.requestUsage(token: fresh, userId: userId)
                 }
             }
-            if status == 401 || status == 403 {
-                snap.error = L("Unauthorized — run `cursor-agent login` to refresh")
-                return snap
-            }
-            guard status == 200 else {
-                snap.error = L("HTTP %d", status)
-                return snap
-            }
-            snap.windows = Self.parseUsage(data)
-            snap.updatedAt = Date()
-            if snap.windows.isEmpty { snap.error = L("No usage data in response") }
-            return snap
+            return Self.finish(snap, data: data, status: status,
+                               unauthorized: L("Unauthorized — run `cursor-agent login` to refresh"))
         } catch {
             snap.error = error.localizedDescription
             return snap
         }
+    }
+
+    private static func finish(_ snap: ProviderSnapshot, data: Data, status: Int,
+                               unauthorized: String) -> ProviderSnapshot {
+        var snap = snap
+        if status == 401 || status == 403 {
+            snap.error = unauthorized
+            return snap
+        }
+        guard status == 200 else {
+            snap.error = L("HTTP %d", status)
+            return snap
+        }
+        snap.windows = parseUsage(data)
+        snap.updatedAt = Date()
+        if snap.windows.isEmpty { snap.error = L("No usage data in response") }
+        return snap
+    }
+
+    /// Parses a pasted cookie value: "<userId>::<jwt>" or "<userId>%3A%3A<jwt>",
+    /// optionally with the "WorkosCursorSessionToken=" prefix still attached.
+    static func parseSession(_ raw: String) -> (userId: String, token: String)? {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let eq = value.range(of: "WorkosCursorSessionToken=") {
+            value = String(value[eq.upperBound...])
+        }
+        if let semicolon = value.firstIndex(of: ";") { value = String(value[..<semicolon]) }
+        value = value.replacingOccurrences(of: "%3A%3A", with: "::")
+            .replacingOccurrences(of: "%3a%3a", with: "::")
+        let parts = value.components(separatedBy: "::")
+        guard parts.count == 2, !parts[0].isEmpty, parts[1].count > 20 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private static func loadSession(_ url: URL) -> (userId: String, token: String)? {
+        guard let data = try? Data(contentsOf: url),
+              let raw = String(data: data, encoding: .utf8) else { return nil }
+        return parseSession(raw)
     }
 
     private static func requestUsage(token: String, userId: String) async throws -> (Data, Int) {

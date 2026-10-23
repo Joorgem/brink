@@ -2,8 +2,11 @@ import Foundation
 
 /// Reads the Codex CLI's OAuth token (~/.codex/auth.json) and queries the
 /// ChatGPT backend usage endpoint, as documented by the CodexBar project.
+/// Extra accounts are Codex logins in their own folder (`CODEX_HOME=<dir> codex login`).
 struct CodexProvider: UsageProvider {
     let id = "codex"
+    /// nil = $CODEX_HOME or ~/.codex.
+    var home: URL? = nil
 
     private static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
@@ -11,7 +14,7 @@ struct CodexProvider: UsageProvider {
         var snap = ProviderSnapshot(id: id, name: "Codex",
                                     systemImage: "terminal",
                                     windows: [], error: nil)
-        guard let auth = Self.loadAuth() else {
+        guard let auth = Self.loadAuth(home: home) else {
             return ClaudeProvider.demoSnapshot(name: "Codex", systemImage: "terminal",
                                                note: L("Codex CLI credentials not found (~/.codex/auth.json)"))
         }
@@ -51,9 +54,8 @@ struct CodexProvider: UsageProvider {
         var accountID: String?
     }
 
-    static func loadAuth() -> Auth? {
-        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+    static func loadAuth(home: URL? = nil) -> Auth? {
+        guard let home = home ?? ProviderKind.codex.defaultDirectory else { return nil }
         let url = home.appendingPathComponent("auth.json")
         guard let data = try? Data(contentsOf: url),
               let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
@@ -81,11 +83,12 @@ struct CodexProvider: UsageProvider {
             ?? (root["rate_limits"] as? [String: Any])
             ?? root
         var windows: [UsageWindow] = []
+        // Same names Codex itself uses in `/status`.
         let ordered: [(String, String)] = [
-            ("primary_window", "Current session"),
-            ("primary", "Current session"),
-            ("secondary_window", "Weekly"),
-            ("secondary", "Weekly"),
+            ("primary_window", "5h limit"),
+            ("primary", "5h limit"),
+            ("secondary_window", "Weekly limit"),
+            ("secondary", "Weekly limit"),
         ]
         var seenLabels = Set<String>()
         for (key, label) in ordered {
@@ -99,17 +102,19 @@ struct CodexProvider: UsageProvider {
         return windows
     }
 
+    /// The usage endpoint says `reset_at` / `reset_after_seconds`; the CLI's
+    /// own session logs say `resets_at` / `resets_in_seconds`. Accept both.
     static func resetDate(_ dict: [String: Any]) -> Date? {
-        if let s = ClaudeProvider.number(dict["resets_in_seconds"]) {
-            return Date().addingTimeInterval(s)
+        for key in ["reset_after_seconds", "resets_in_seconds"] {
+            if let s = ClaudeProvider.number(dict[key]) { return Date().addingTimeInterval(s) }
         }
-        if let iso = ClaudeProvider.isoDate(dict["resets_at"]) {
-            return iso
-        }
-        if let epoch = ClaudeProvider.number(dict["resets_at"]) {
-            // Could be seconds or milliseconds since epoch.
-            let seconds = epoch > 10_000_000_000 ? epoch / 1000.0 : epoch
-            return Date(timeIntervalSince1970: seconds)
+        for key in ["reset_at", "resets_at"] {
+            if let iso = ClaudeProvider.isoDate(dict[key]) { return iso }
+            if let epoch = ClaudeProvider.number(dict[key]) {
+                // Could be seconds or milliseconds since epoch.
+                let seconds = epoch > 10_000_000_000 ? epoch / 1000.0 : epoch
+                return Date(timeIntervalSince1970: seconds)
+            }
         }
         return nil
     }
