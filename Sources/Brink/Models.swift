@@ -132,7 +132,7 @@ final class UsageStore: ObservableObject {
         snapshots.first { $0.id == account.id.uuidString }
     }
 
-    func startAutoRefresh(interval: TimeInterval = 120) {
+    func startAutoRefresh(interval: TimeInterval = 300) {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             guard let self else { return }

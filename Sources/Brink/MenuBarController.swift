@@ -121,7 +121,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
         // An accessory app has to activate for text fields (rename, add account) to get focus.
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        store.refreshIfStale()
+        store.refreshIfStale(olderThan: 180)
     }
 
     func popoverDidClose(_ notification: Notification) {

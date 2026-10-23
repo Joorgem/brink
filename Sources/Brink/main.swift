@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         themeStore = ThemeStore(defaultMenuBarAccount: accounts.accounts.first?.id.uuidString ?? "")
         Notifier.shared.requestAuthorizationIfNeeded()
         menuBar = MenuBarController(store: store, accounts: accounts, themeStore: themeStore)
-        store.startAutoRefresh(interval: 120)
+        store.startAutoRefresh(interval: 300)
     }
 }
 
