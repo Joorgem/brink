@@ -233,7 +233,7 @@ final class AccountStore: ObservableObject {
         guard let i = accounts.firstIndex(where: { $0.id == id }) else { return }
         let account = accounts.remove(at: i)
         // Drop whatever Brink cached for it. The CLI's own login is never touched.
-        for suffix in ["credentials.json", "credentials.json.pending", "cursor-session"] {
+        for suffix in ["credentials.json", "credentials.json.pending", "usage.json", "cursor-session"] {
             try? FileManager.default.removeItem(at: account.storageURL(suffix))
         }
         save()

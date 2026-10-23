@@ -52,10 +52,44 @@ final class ClaudeProvider: UsageProvider {
     // we stop hitting the network until Anthropic's own `Retry-After` window
     // has passed, and meanwhile keep showing the last good numbers instead of
     // blanking the ring out.
-    private var cache: ProviderSnapshot?
+    private var cache: ProviderSnapshot? {
+        didSet { if let cache { saveUsage(cache) } }
+    }
+    private var loadedSavedUsage = false
+
+    /// The last good numbers, kept on disk (numbers and reset times only) so a
+    /// restart during a rate limit shows them instead of an endless "Loading".
+    private var usageURL: URL {
+        ownStoreURL.deletingLastPathComponent().appendingPathComponent(
+            ownStoreURL.lastPathComponent.replacingOccurrences(of: "credentials.json", with: "usage.json"))
+    }
+
+    private struct SavedUsage: Codable {
+        var windows: [UsageWindow]
+        var updatedAt: Date?
+    }
+
+    private func saveUsage(_ snap: ProviderSnapshot) {
+        guard let data = try? JSONEncoder().encode(SavedUsage(windows: snap.windows, updatedAt: snap.updatedAt))
+        else { return }
+        AccountFiles.writePrivate(data, to: usageURL)
+    }
+
+    private func loadSavedUsage() {
+        guard !loadedSavedUsage else { return }
+        loadedSavedUsage = true
+        guard cache == nil,
+              let data = try? Data(contentsOf: usageURL),
+              let saved = try? JSONDecoder().decode(SavedUsage.self, from: data),
+              !saved.windows.isEmpty else { return }
+        cache = ProviderSnapshot(id: id, name: "Claude", systemImage: "asterisk",
+                                 windows: saved.windows, error: nil,
+                                 accent: UsageColor.claudeOrange, updatedAt: saved.updatedAt)
+    }
     private var cooldownUntil: Date?
 
     func fetch() async -> ProviderSnapshot {
+        loadSavedUsage()
         if let until = cooldownUntil, Date() < until {
             return rateLimitedSnapshot(retryAt: until)
         }

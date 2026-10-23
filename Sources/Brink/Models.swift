@@ -4,9 +4,9 @@ import Combine
 
 // MARK: - Data model
 
-struct UsageWindow: Identifiable {
+struct UsageWindow: Identifiable, Codable {
     var id: String { label }
-    var label: String            // "Current session", "All models (weekly)"...
+    var label: String            // "Current session", "Weekly limit"...
     var usedPercent: Double      // 0...100
     var resetsAt: Date?
 
