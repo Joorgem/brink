@@ -194,7 +194,8 @@ struct AccountRow: View {
                 }
                 ForEach(snapshot.windows.dropFirst()) { window in
                     SecondaryUsageRow(window: window,
-                                      color: UsageColor.color(for: snapshot, percent: window.usedPercent))
+                                      color: UsageColor.color(for: snapshot, percent: window.usedPercent),
+                                      showsReset: window.id == snapshot.weekly?.id)
                 }
                 if let error = snapshot.error {
                     Text(error)
@@ -298,12 +299,24 @@ struct AccountRow: View {
     }
 }
 
-/// "All models   ▬▬░░░░  22%"
+/// "All models   ▬▬░░░░  22%", with "Resets Mon 14:00" under it for the weekly window.
 struct SecondaryUsageRow: View {
     let window: UsageWindow
     let color: Color
+    var showsReset = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            bar
+            if showsReset, let reset = window.resetText {
+                Text(reset)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var bar: some View {
         HStack(spacing: 8) {
             Text(L(window.label))
                 .font(.system(size: 11))
